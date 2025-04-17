@@ -1,0 +1,28 @@
+{
+  "contributors": [
+    {
+      "name": "Charles Assaad",
+      "profile": "https://github.com/ckassaad",
+      "contributions": [
+        "code",
+        "doc"
+      ]
+    },
+    {
+      "name": "Simon Ferreira",
+      "profile": "https://github.com/ckassaad",
+      "contributions": [
+        "code",
+        "doc"
+      ]
+    },
+    {
+      "name": "Federico Baldo",
+      "profile": "https://github.com/ckassaad",
+      "contributions": [
+        "code",
+        "doc"
+      ]
+    }
+  ]
+}
