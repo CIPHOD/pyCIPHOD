@@ -9,6 +9,7 @@ PyCIPHOD is a robust and versatile Python package developed and maintained by th
 ## Key features
 
 ### Temporal data
+* iid data
 * Time series
 * Cohorts
 
