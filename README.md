@@ -1,4 +1,4 @@
-# <span style="color:#F7B617">Py</span><span style="color:#c82804">CIPHOD</span> - <span style="color:#4851a1">Python package for Causal Inference in Public Health using Observational Databases in Python</span>
+# <span style="color:#F7B617">Py</span><span style="color:#c82804">CIPHOD</span> - <span style="color:#4851a1">Python package for Causal Inference in Public Health using Observational Databases</span>
 
 ## Introduction
 
