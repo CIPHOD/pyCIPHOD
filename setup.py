@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
 name="PyCIPHOD",
-author="Charles Assaad",
+author="Charles Assaad, Simon Ferreira, Federico Baldo",
 author_email="charles.assaad@inserm.fr",
 version="0.1",
 description="A Python package for causal discovery, causal inference, and root cause analysis",
