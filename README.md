@@ -48,7 +48,7 @@ About causal discovery
 * https://openreview.net/forum?id=TcMKrmLJCL
 
 About causal reasoning
-* [https://arxiv.org/pdf/2310.14691](https://openreview.net/forum?id=lL4EzE8bY8)
+* https://openreview.net/forum?id=lL4EzE8bY8
 * https://ojs.aaai.org/index.php/AAAI/article/view/30021
 * [https://arxiv.org/abs/2406.05805](https://openreview.net/forum?id=5f7YlSKG1l)
 * https://ojs.aaai.org/index.php/AAAI/article/view/34882
