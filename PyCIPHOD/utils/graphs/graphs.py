@@ -1,5 +1,6 @@
 import networkx as nx
 import matplotlib.pyplot as plt
+import numpy as np 
 
 
 class Graph:
@@ -9,6 +10,7 @@ class Graph:
         self._confounded_g = nx.Graph()
         self._undirected_g = nx.Graph()
         self._uncertain_g = nx.DiGraph()
+
         self._g = nx.MultiDiGraph()
 
         self._directed_g.nodes = self._g.nodes
@@ -16,8 +18,9 @@ class Graph:
         self._undirected_g.nodes = self._g.nodes
         self._uncertain_g.nodes = self._g.nodes
 
+
         self._list_certain_edge_types = ['<->', '->', '-']
-        self._list_uncertain_edge_types = ['*-o', '*->', '*-']
+        self._list_uncertain_edge_types = ['*-o', '*->', '*-', '--', '-->', '-||']
 
     def add_vertex(self, vertex: str) -> None:
         if vertex not in self._g.nodes:
@@ -90,7 +93,7 @@ class Graph:
 
         :param vertex_i:
         :param vertex_j:
-        :param edge_type: '*-o' or '*->' or '*-'
+        :param edge_type: '*-o' or '*->' or '*-' or '--' or '-->' or '-||'
         :return:
         """
         self.add_vertex(vertex_i)
@@ -98,9 +101,6 @@ class Graph:
         assert edge_type in self._list_uncertain_edge_types
         self._uncertain_g.add_edge(vertex_i, vertex_j, type=edge_type)
         self._g.add_edge(vertex_i, vertex_j, key=edge_type)
-        if (vertex_j, vertex_i) not in self._uncertain_g.edges:
-            self._uncertain_g.add_edge(vertex_j, vertex_i, type='*-o')
-            self._g.add_edge(vertex_j, vertex_i, key='*-o')
 
     def remove_uncertain_edge(self, vertex_i: str, vertex_j: str) -> None:
         self._uncertain_g.remove_edge(vertex_i, vertex_j)
@@ -135,11 +135,9 @@ class Graph:
 
     def get_undirected_edges(self):
         return set(self._undirected_g.edges)
-
+    
     def get_uncertain_edges(self):
-        uncertain_edges = [(vertex_i, vertex_j, attrs.get("type")) for vertex_i, vertex_j, attrs in
-                           self._uncertain_g.edges(data=True)]
-        return set(uncertain_edges)
+        return set(self._uncertain_g.edges)
 
     def get_edge_types(self, vertex_i: str, vertex_j: str):
         return set(list(self._g.get_edge_data(vertex_i, vertex_j).keys()))
@@ -162,6 +160,22 @@ class Graph:
         children = self.get_children(vertex)
         adjacencies = parents.union(children)
         return adjacencies
+    
+    def get_all_adjacencies(self, vertex: str) -> set:
+        adjacents = set()
+        if vertex in self._directed_g:
+            adjacents.update(self._directed_g.predecessors(vertex))
+            adjacents.update(self._directed_g.successors(vertex))
+        if vertex in self._confounded_g:
+            adjacents.update(self._confounded_g.neighbors(vertex))
+        if vertex in self._undirected_g:
+            adjacents.update(self._undirected_g.neighbors(vertex))
+        if vertex in self._uncertain_g:
+            adjacents.update(self._uncertain_g.predecessors(vertex))
+            adjacents.update(self._uncertain_g.successors(vertex))
+        return adjacents
+
+
 
     def get_ancestors(self, vertex: str) -> set:
         """
@@ -234,52 +248,65 @@ class Graph:
         1
 
     def draw_graph(self, treatment: set = None, outcome: set = None):
-
-        vertex_color = "black"
-        font_color = "white"
+        vertex_color = "lightblue"
+        font_color = "black"
         directed_edge_color = "gray"
         confounded_edge_color = "black"
         undirected_edge_color = "black"
         uncertain_edge_color = "#F7B617"
         treatment_color = "#c82804"
         outcome_color = "#4851a1"
-        # nx.draw(self._g, with_labels=True, node_color=vertex_color, edge_color=directed_edge_color, connectionstyle='arc3, rad = 0.1')
 
-        pos = nx.spring_layout(self._g, seed=2)
+        all_nodes = list(self._g.nodes)
+        outcome = set(outcome or [])
+        treatment = set(treatment or [])
+        non_outcome_nodes = [n for n in all_nodes if n not in outcome]
+
+        # Layout
+        circular_pos = nx.circular_layout(self._g.subgraph(non_outcome_nodes))
+        center = np.array([0.0, 0.0])
+        pos = {n: center for n in outcome}
+        pos.update(circular_pos)
+
         fig, ax = plt.subplots()
+
         nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(treatment), node_color=treatment_color)
         nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(outcome), node_color=outcome_color)
-        set_vertices = set(self._g.nodes)
-        if treatment:
-            set_vertices = set_vertices.difference(treatment)
-        if outcome:
-            set_vertices = set_vertices.difference(outcome)
-        print(set_vertices)
-        nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=set_vertices, node_color=vertex_color)
+
+        set_vertices = set(self._g.nodes) - treatment - outcome
+        nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(set_vertices), node_color=vertex_color)
         nx.draw_networkx_labels(self._g, pos, ax=ax, font_color=font_color)
 
-        # curved_edges = [edge for edge in self._g.edges() if reversed(edge) in self._g.edges()]
-        acyclic_edges = [edge for edge in self.get_directed_edges() if (edge[1], edge[0]) not in
-                         self.get_directed_edges()]
+        acyclic_edges = [edge for edge in self.get_directed_edges() if (edge[1], edge[0]) not in self.get_directed_edges()]
         cyclic_edges = [edge for edge in self.get_directed_edges() if (edge[1], edge[0]) in self.get_directed_edges()]
-        # straight_edges = list(set(self._g.edges()) - set(curved_edges))
         confounded_edges = self.get_confounded_edges()
         undirected_edges = self.get_undirected_edges()
-        uncertain_edges = self.get_uncertain_edges()
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=acyclic_edges, edge_color=directed_edge_color)
-        arc_rad_cycles = 0.15
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=cyclic_edges, edge_color=directed_edge_color,
-                               connectionstyle=f'arc3, rad = {arc_rad_cycles}')
-        arc_rad_confounding = 0.55
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=confounded_edges, arrowstyle='<|-|>',
-                               edge_color=confounded_edge_color, connectionstyle=f'arc3, rad = {arc_rad_confounding}')
-        arc_rad_undirected = 0.55
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=undirected_edges, arrowstyle='-',
-                               edge_color=undirected_edge_color, connectionstyle=f'arc3, rad = {arc_rad_undirected}')
-        # todo
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=uncertain_edges, arrowstyle=']-[',
-                               edge_color=uncertain_edge_color)
-        plt.show()
+
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=acyclic_edges, edge_color=directed_edge_color, arrowstyle='->')
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=cyclic_edges, edge_color=directed_edge_color, arrowstyle='->')
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=confounded_edges, arrowstyle='<|-|>', edge_color=confounded_edge_color)
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=undirected_edges, arrowstyle='-', edge_color=undirected_edge_color)
+
+        dashed_arrow = [(u, v) for (u, v, t) in self.get_edges() if t == '-->']
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=dashed_arrow, edge_color=uncertain_edge_color,
+                            style='dashed', arrowstyle='->')
+
+        arrow_double_bar = [(u, v) for (u, v, t) in self.get_edges() if t == '-||']
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=arrow_double_bar, edge_color="red",
+                            style='solid', arrowstyle='-[')
+
+        plt.axis('off')
+    plt.show()
+
+
+
+    
+
+
+
+    
+    
+
 
 
 class FullySpecifiedGraph(Graph):
@@ -314,42 +341,3 @@ class DirectedAcyclicGraph(AcyclicDirectedMixedGraph):
 
 
 
-
-if __name__ == '__main__':
-    # g = nx.MultiDiGraph()
-    # g.add_nodes_from(["a", "b", "c"])
-    # print(g)
-    # g.add_edges_from([("a", "b"), ("a", "c")])
-    # g.add_edges_from([("a", "a"), ("b", "a")])
-    # g.add_edges_from([("a", "a"), ("b", "a")])
-    # print(g.edges)
-    g = Graph()
-    g.add_directed_edge("x", "z")
-    g.add_directed_edge("z", "x")
-    g.add_directed_edge("z", "y")
-    g.add_confounded_edge("x", "y")
-    g.add_directed_edge("x", "w")
-    g.add_directed_edge("y", "w")
-    g.add_uncertain_edge("w", "u", edge_type="*->")
-    print(g.get_directed_edges())
-    print(g.get_confounded_edges())
-    print(g.get_vertices())
-    print(g.get_parents("y"))
-    print(g.get_adjacencies("y"))
-    print(g.get_confounded_adjacencies("y"))
-    print(g.get_ancestors("w"))
-    print(g.get_descendants("w"))
-    print(g.get_non_descendants("w"))
-    print(g.get_uncertain_edges())
-
-    print(g.get_edges())
-
-    # print(g._g.nodes)
-    # print(g._directed_g.nodes)
-    # print(g._confounded_g.nodes)
-    # print(g._undirected_g.nodes)
-    # print(g._uncertain_g.nodes)
-
-    print(g.get_edge_types('x', 'y'))
-
-    g.draw_graph({"x"}, {"y"})
