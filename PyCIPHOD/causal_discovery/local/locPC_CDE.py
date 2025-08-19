@@ -1,6 +1,6 @@
 from itertools import combinations
 from utils.graphs.graphs import Graph
-from utils.independence_tests.basics import 
+from utils.independence_tests.basics import fisherz_CI_test, gsq_CI_test, chi2_CI_test, kci_CI_test
 
 
 import pandas as pd
@@ -77,13 +77,13 @@ class LocPC:
 
         # --- CI test selection ---
         if CI_test == "fisherz":
-            self.CI_test = self.fisherz_CI_test
+            self.CI_test = fisherz_CI_test
         elif CI_test == "gsq":
-            self.CI_test = self.gsq_CI_test
+            self.CI_test = gsq_CI_test
         elif CI_test == "kci":
-            self.CI_test = self.kci_CI_test
+            self.CI_test = kci_CI_test
         elif CI_test == "chisq" :
-            self.CI_test = self.chi2_CI_test
+            self.CI_test = chi2_CI_test
         else:
             raise ValueError(f"Unsupported CI_test '{CI_test}'. Choose from 'fisherz', 'gsq', 'chisq', or 'kci'.")
 
