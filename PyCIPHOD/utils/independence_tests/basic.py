@@ -5,7 +5,7 @@ from sklearn.linear_model import LinearRegression as lr
 from sklearn.feature_selection import f_regression as fr
 
 
-
+from causallearn.utils.cit import CIT
 
 def fisherz_CI_test(data, X, Y, S, alpha = 0.05) -> bool:
     """
