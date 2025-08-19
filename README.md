@@ -50,14 +50,14 @@ About causal discovery
 About causal reasoning
 * https://openreview.net/forum?id=lL4EzE8bY8
 * https://ojs.aaai.org/index.php/AAAI/article/view/30021
-* [https://arxiv.org/abs/2406.05805](https://openreview.net/forum?id=5f7YlSKG1l)
+* https://openreview.net/forum?id=5f7YlSKG1l
 * https://ojs.aaai.org/index.php/AAAI/article/view/34882
 * https://openreview.net/forum?id=yYGdFo4kKb
 * https://openreview.net/forum?id=905LEugq6R
 
 About root cause analysis
 * https://proceedings.mlr.press/v206/assaad23a/assaad23a.pdf
-* [https://arxiv.org/pdf/2402.06500v1](https://dl.acm.org/doi/pdf/10.1145/3627673.3680010)
+* https://dl.acm.org/doi/pdf/10.1145/3627673.3680010
 
 
 ## List of all contributors (alphabetical order)
