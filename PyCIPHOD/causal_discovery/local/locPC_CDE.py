@@ -1,12 +1,11 @@
-from itertools import combinations
 from utils.graphs.graphs import Graph
 from utils.independence_tests.basics import fisherz_CI_test, gsq_CI_test, chi2_CI_test, kci_CI_test
 
 
 import pandas as pd
 import networkx as nx 
-import matplotlib.pyplot as plt
 import numpy as np 
+from itertools import combinations
 
 
 
