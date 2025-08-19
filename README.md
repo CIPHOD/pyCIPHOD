@@ -61,4 +61,4 @@ About root cause analysis
 * Charles Assaad
 * Federico Baldo
 * Simon Ferreira
-
+* Timothée Loranchet
