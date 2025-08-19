@@ -1,7 +1,7 @@
 from itertools import combinations
 from utils.graphs.graphs import Graph
 from utils.independence_tests import *
-from causallearn.utils.cit import CIT
+
 
 import pandas as pd
 import networkx as nx 
