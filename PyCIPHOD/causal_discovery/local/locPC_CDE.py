@@ -1,6 +1,6 @@
 from itertools import combinations
 from utils.graphs.graphs import Graph
-from utils.independence_tests import *
+from utils.independence_tests.basics import 
 
 
 import pandas as pd
