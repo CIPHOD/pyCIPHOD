@@ -516,60 +516,7 @@ class LocPC:
         return True
     
     
-    def draw_graph(self):
-        treatment = self.visited 
-        outcome = self.target_node
-        vertex_color = "lightblue"
-        font_color = "black"
-        directed_edge_color = "gray"
-        confounded_edge_color = "black"
-        undirected_edge_color = "black"
-        uncertain_edge_color = "#F7B617"
-        treatment_color = "#c82804"
-        outcome_color = "#4851a1"
-
-        all_nodes = list(self._g.nodes)
-        outcome = set(outcome or [])
-        treatment = set(treatment or [])
-        non_outcome_nodes = [n for n in all_nodes if n not in outcome]
-
-        # Layout
-        circular_pos = nx.circular_layout(self._g.subgraph(non_outcome_nodes))
-        center = np.array([0.0, 0.0])
-        pos = {n: center for n in outcome}
-        pos.update(circular_pos)
-
-        fig, ax = plt.subplots()
-
-        nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(treatment), node_color=treatment_color)
-        nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(outcome), node_color=outcome_color)
-
-        set_vertices = set(self._g.nodes) - treatment - outcome
-        nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(set_vertices), node_color=vertex_color)
-        nx.draw_networkx_labels(self._g, pos, ax=ax, font_color=font_color)
-
-        acyclic_edges = [edge for edge in self.get_directed_edges() if (edge[1], edge[0]) not in self.get_directed_edges()]
-        cyclic_edges = [edge for edge in self.get_directed_edges() if (edge[1], edge[0]) in self.get_directed_edges()]
-        confounded_edges = self.get_confounded_edges()
-        undirected_edges = self.get_undirected_edges()
-
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=acyclic_edges, edge_color=directed_edge_color, arrowstyle='->')
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=cyclic_edges, edge_color=directed_edge_color, arrowstyle='->')
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=confounded_edges, arrowstyle='<|-|>', edge_color=confounded_edge_color)
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=undirected_edges, arrowstyle='-', edge_color=undirected_edge_color)
-
-        dashed_arrow = [(u, v) for (u, v, t) in self.get_edges() if t == '-->']
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=dashed_arrow, edge_color=uncertain_edge_color,
-                            style='dashed', arrowstyle='->')
-
-        arrow_double_bar = [(u, v) for (u, v, t) in self.get_edges() if t == '-||']
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=arrow_double_bar, edge_color="red",
-                            style='solid', arrowstyle='-[')
-
-        plt.axis('off')
-    plt.show()
-
-
+    
     
 
 def runLocPC_CDE(data, treatment, outcome, alpha=0.05, CI_test="fisherz", linear_estimation=False, known_sepset=None, return_leg=True, forbidden_edges=[], display = True):
