@@ -10,7 +10,7 @@
     },
     {
       "name": "Simon Ferreira",
-      "profile": "https://github.com/ckassaad",
+      "profile": "https://github.com/SimonFerreiraFR",
       "contributions": [
         "code",
         "doc"
@@ -18,11 +18,20 @@
     },
     {
       "name": "Federico Baldo",
-      "profile": "https://github.com/ckassaad",
+      "profile": "https://github.com/Federic0Bald0",
+      "contributions": [
+        "code",
+        "doc"
+      ]
+    },
+    {
+      "name": "Timothée Loranchet",
+      "profile": "https://github.com/timlrct",
       "contributions": [
         "code",
         "doc"
       ]
     }
+
   ]
 }
