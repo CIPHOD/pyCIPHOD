@@ -1,154 +1,18 @@
-from itertools import combinations
 from utils.graphs.graphs import Graph
-from causallearn.utils.cit import CIT
+from utils.independence_tests.basics import fisherz_CI_test, gsq_CI_test, chi2_CI_test, kci_CI_test
+
 
 import pandas as pd
 import networkx as nx 
-import matplotlib.pyplot as plt
 import numpy as np 
+from itertools import combinations
+
 
 
 ######################################################################
 
 
 class LocPC:
-    ### CI TESTS METHODS ###
-    @staticmethod
-    def fisherz_CI_test(data, X, Y, S, alpha = 0.05) -> bool:
-        """
-        Test conditional independence with Fisher Z test using CIT.
-
-        Args:
-            data: pandas DataFrame with the variables.
-            X (str): name of first variable.
-            Y (str): name of second variable.
-            S (list[str] or None): conditioning set variable names.
-            alpha (float): significance threshold.
-
-        Returns:
-            bool: True if X _independent_ of Y given S (p > alpha), else False.
-        """
-        # Convert DataFrame to numpy array
-        data_np = data.to_numpy()
-
-        # Map variable names to indices in the numpy array
-        var_idx = {var: idx for idx, var in enumerate(data.columns)}
-
-        fisherz_obj = CIT(data_np, "fisherz")
-
-        # Convert variable names X, Y, S to indices
-        x_idx = var_idx[X]
-        y_idx = var_idx[Y]
-        s_idx = [var_idx[s] for s in S] if S else []
-
-        pValue = fisherz_obj(x_idx, y_idx, s_idx)
-
-        return pValue 
-    
-    @staticmethod
-    def gsq_CI_test(data, X, Y, S, alpha=0.05) -> bool:
-        """
-        Test conditional independence with G² (likelihood ratio chi-squared) test using CIT.
-
-        Args:
-            data: pandas DataFrame with the variables (assumed categorical, ideally binary).
-            X (str): name of first variable.
-            Y (str): name of second variable.
-            S (list[str] or None): conditioning set variable names.
-            alpha (float): significance threshold.
-
-        Returns:
-            bool: True if X _independent_ of Y given S (p > alpha), else False.
-        """
-        # Convert DataFrame to numpy array
-        data_np = data.to_numpy()
-
-        # Map variable names to indices in the numpy array
-        var_idx = {var: idx for idx, var in enumerate(data.columns)}
-
-        # Create G² CIT instance
-        gsq_obj = CIT(data_np, "gsq")
-
-        # Convert variable names to indices
-        x_idx = var_idx[X]
-        y_idx = var_idx[Y]
-        s_idx = [var_idx[s] for s in S] if S else []
-
-        # Run the G² test
-        pValue = gsq_obj(x_idx, y_idx, s_idx)
-
-        return pValue 
-    
-    @staticmethod
-    def chi2_CI_test(data, X, Y, S, alpha=0.05) -> bool:
-        """
-        Test conditional independence with Pearson Chi-squared test using CIT.
-
-        Args:
-            data: pandas DataFrame with the variables (assumed categorical, ideally binary).
-            X (str): name of first variable.
-            Y (str): name of second variable.
-            S (list[str] or None): conditioning set variable names.
-            alpha (float): significance threshold.
-
-        Returns:
-            bool: True if X _independent_ of Y given S (p > alpha), else False.
-        """
-        # Convert DataFrame to numpy array
-        data_np = data.to_numpy()
-
-        # Map variable names to indices in the numpy array
-        var_idx = {var: idx for idx, var in enumerate(data.columns)}
-
-        # Create Chi-squared CIT instance
-        chi2_obj = CIT(data_np, "chisq")
-
-        # Convert variable names to indices
-        x_idx = var_idx[X]
-        y_idx = var_idx[Y]
-        s_idx = [var_idx[s] for s in S] if S else []
-
-        # Run the chi-squared test
-        pValue = chi2_obj(x_idx, y_idx, s_idx)
-
-        return pValue 
-
-    @staticmethod
-    def kci_CI_test(data, X, Y, S, alpha=0.05) -> bool:
-        """
-        Test conditional independence using the Kernel-based Conditional Independence (KCI) test.
-
-        Args:
-            data: pandas DataFrame with the variables (continuous or mixed-type).
-            X (str): name of first variable.
-            Y (str): name of second variable.
-            S (list[str] or None): conditioning set variable names.
-            alpha (float): significance threshold.
-
-        Returns:
-            bool: True if X _independent_ of Y given S (p > alpha), else False.
-        """
-        # Convert DataFrame to numpy array
-        data_np = data.to_numpy()
-
-        # Map variable names to indices in the numpy array
-        var_idx = {var: idx for idx, var in enumerate(data.columns)}
-
-        # Create KCI CIT instance
-        kci_obj = CIT(data_np, "kci")
-
-        # Convert variable names to indices
-        x_idx = var_idx[X]
-        y_idx = var_idx[Y]
-        s_idx = [var_idx[s] for s in S] if S else []
-
-        # Run the KCI test
-        pValue = kci_obj(x_idx, y_idx, s_idx)
-
-        return pValue 
-    
-    ### LOCPC ###
-
     def __init__(self, data, target_node, sepset=None, CI_test="fisherz", alpha=0.05, forbidden_edges: list = [], display = True):
         """
         Initialize a Local PC (LocPC) algorithm instance for local causal discovery.
@@ -212,13 +76,13 @@ class LocPC:
 
         # --- CI test selection ---
         if CI_test == "fisherz":
-            self.CI_test = self.fisherz_CI_test
+            self.CI_test = fisherz_CI_test
         elif CI_test == "gsq":
-            self.CI_test = self.gsq_CI_test
+            self.CI_test = gsq_CI_test
         elif CI_test == "kci":
-            self.CI_test = self.kci_CI_test
+            self.CI_test = kci_CI_test
         elif CI_test == "chisq" :
-            self.CI_test = self.chi2_CI_test
+            self.CI_test = chi2_CI_test
         else:
             raise ValueError(f"Unsupported CI_test '{CI_test}'. Choose from 'fisherz', 'gsq', 'chisq', or 'kci'.")
 
@@ -651,60 +515,7 @@ class LocPC:
         return True
     
     
-    def draw_graph(self):
-        treatment = self.visited 
-        outcome = self.target_node
-        vertex_color = "lightblue"
-        font_color = "black"
-        directed_edge_color = "gray"
-        confounded_edge_color = "black"
-        undirected_edge_color = "black"
-        uncertain_edge_color = "#F7B617"
-        treatment_color = "#c82804"
-        outcome_color = "#4851a1"
-
-        all_nodes = list(self._g.nodes)
-        outcome = set(outcome or [])
-        treatment = set(treatment or [])
-        non_outcome_nodes = [n for n in all_nodes if n not in outcome]
-
-        # Layout
-        circular_pos = nx.circular_layout(self._g.subgraph(non_outcome_nodes))
-        center = np.array([0.0, 0.0])
-        pos = {n: center for n in outcome}
-        pos.update(circular_pos)
-
-        fig, ax = plt.subplots()
-
-        nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(treatment), node_color=treatment_color)
-        nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(outcome), node_color=outcome_color)
-
-        set_vertices = set(self._g.nodes) - treatment - outcome
-        nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(set_vertices), node_color=vertex_color)
-        nx.draw_networkx_labels(self._g, pos, ax=ax, font_color=font_color)
-
-        acyclic_edges = [edge for edge in self.get_directed_edges() if (edge[1], edge[0]) not in self.get_directed_edges()]
-        cyclic_edges = [edge for edge in self.get_directed_edges() if (edge[1], edge[0]) in self.get_directed_edges()]
-        confounded_edges = self.get_confounded_edges()
-        undirected_edges = self.get_undirected_edges()
-
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=acyclic_edges, edge_color=directed_edge_color, arrowstyle='->')
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=cyclic_edges, edge_color=directed_edge_color, arrowstyle='->')
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=confounded_edges, arrowstyle='<|-|>', edge_color=confounded_edge_color)
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=undirected_edges, arrowstyle='-', edge_color=undirected_edge_color)
-
-        dashed_arrow = [(u, v) for (u, v, t) in self.get_edges() if t == '-->']
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=dashed_arrow, edge_color=uncertain_edge_color,
-                            style='dashed', arrowstyle='->')
-
-        arrow_double_bar = [(u, v) for (u, v, t) in self.get_edges() if t == '-||']
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=arrow_double_bar, edge_color="red",
-                            style='solid', arrowstyle='-[')
-
-        plt.axis('off')
-    plt.show()
-
-
+    
     
 
 def runLocPC_CDE(data, treatment, outcome, alpha=0.05, CI_test="fisherz", linear_estimation=False, known_sepset=None, return_leg=True, forbidden_edges=[], display = True):
