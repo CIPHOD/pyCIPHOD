@@ -1,7 +1,3 @@
-"""
-Coded by Charles Assaad, Simon Ferreira Imad Ez-Zejjari and Lei Zan
-"""
-
 import networkx as nx
 import pandas as pd
 import numpy as np
