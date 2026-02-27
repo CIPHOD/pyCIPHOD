@@ -1,5 +1,6 @@
+import pandas as pd
 import numpy as np
-from scipy.stats import norm
+from scipy.stats import norm, chi2
 
 from sklearn.linear_model import LinearRegression as lr
 from sklearn.feature_selection import f_regression as fr
@@ -22,10 +23,26 @@ class CiTests:
 
 
 class FisherZ(CiTests):
+    """
+    Continuous conditional independence test using the Fisher Z-transform.
+    Suitable for Gaussian data. Computes partial correlations and corresponding p-values.
+    Reference: Spirtes et al., "Causation, Prediction, and Search".
+    """
+
     def __init__(self, x, y, cond_list=None):
-        CiTests.__init__(self, x, y, cond_list)
+        """
+        Initialize the test with variables X, Y and optional conditioning set Z.
+        :param x: str, name of first variable
+        :param y: str, name of second variable
+        :param cond_list: list of str, conditioning variables
+        """
+        super().__init__(x, y, cond_list)
 
     def get_dependence(self, df):
+        """
+        Compute the partial correlation between X and Y given Z.
+        Returns a correlation coefficient r in [-1,1].
+        """
         list_nodes = [self.x, self.y] + self.cond_list
         df = df[list_nodes]
         a = df.values.T
@@ -38,154 +55,231 @@ class FisherZ(CiTests):
         correlation_matrix = np.corrcoef(a)
         var = list((0, 1) + tuple(cond_list_int))
         sub_corr_matrix = correlation_matrix[np.ix_(var, var)]
+
         if np.linalg.det(sub_corr_matrix) == 0:
             r = 1
         else:
             inv = np.linalg.inv(sub_corr_matrix)
             r = -inv[0, 1] / np.sqrt(inv[0, 0] * inv[1, 1])
+
         return r
 
     def get_pvalue(self, df):
+        """
+        Compute the p-value for the partial correlation.
+        Uses the Fisher Z-transform:
+            z = 0.5 * ln((1+r)/(1-r))
+            test statistic = sqrt(n - |Z| - 3) * |z|
+        Returns a two-sided p-value.
+        """
         r = self.get_dependence(df)
+        # Avoid numerical issues for r=1
         if r == 1:
-            r = r - 0.0000000001
+            r -= 1e-10
         z = 0.5 * np.log((1 + r) / (1 - r))
-        pval = np.sqrt(df.shape[0] - len(self.cond_list) - 3) * abs(z)
-        pval = 2 * (1 - norm.cdf(abs(pval)))
-
+        test_stat = np.sqrt(df.shape[0] - len(self.cond_list) - 3) * abs(z)
+        pval = 2 * (1 - norm.cdf(abs(test_stat)))
         return pval
 
-from causallearn.utils.cit import CIT
 
-def fisherz_CI_test(data, X, Y, S, alpha = 0.05) -> bool:
+class Gsq(CiTests):
     """
-    Test conditional independence with Fisher Z test using CIT.
-
-    Args:
-        data: pandas DataFrame with the variables.
-        X (str): name of first variable.
-        Y (str): name of second variable.
-        S (list[str] or None): conditioning set variable names.
-        alpha (float): significance threshold.
-
-    Returns:
-        bool: True if X _independent_ of Y given S (p > alpha), else False.
+    Discrete conditional independence test using the G² likelihood-ratio test.
+    Reference: Spirtes et al., "Causation, Prediction, and Search".
     """
-    # Convert DataFrame to numpy array
-    data_np = data.to_numpy()
 
-    # Map variable names to indices in the numpy array
-    var_idx = {var: idx for idx, var in enumerate(data.columns)}
+    def __init__(self, x, y, cond_list=None):
+        super().__init__(x, y, cond_list)
 
-    fisherz_obj = CIT(data_np, "fisherz")
+    def _contingency_table(self, df):
+        """
+        Compute the joint frequency table for X, Y given Z.
+        Returns a dictionary mapping conditioning states to 2D contingency arrays.
+        """
+        if not self.cond_list:
+            # No conditioning: simple 2D table
+            table = pd.crosstab(df[self.x], df[self.y])
+            return {(): table.values}
+        else:
+            # Group by conditioning variables
+            grouped = df.groupby(self.cond_list)
+            tables = {}
+            for cond_values, sub_df in grouped:
+                table = pd.crosstab(sub_df[self.x], sub_df[self.y])
+                tables[cond_values] = table.values
+            return tables
 
-    # Convert variable names X, Y, S to indices
-    x_idx = var_idx[X]
-    y_idx = var_idx[Y]
-    s_idx = [var_idx[s] for s in S] if S else []
+    def get_dependence(self, df):
+        """
+        Returns the G² statistic.
+        """
+        tables = self._contingency_table(df)
+        g2_stat = 0
+        for table in tables.values():
+            if table.size == 0:
+                continue
+            n = np.sum(table)
+            row_sums = np.sum(table, axis=1)
+            col_sums = np.sum(table, axis=0)
+            expected = np.outer(row_sums, col_sums) / n
+            # Only consider nonzero expected counts
+            mask = expected > 0
+            g2_stat += 2 * np.sum(table[mask] * np.log(table[mask] / expected[mask]))
+        return g2_stat
 
-    pValue = fisherz_obj(x_idx, y_idx, s_idx)
+    def get_pvalue(self, df):
+        """
+        Returns the p-value of the G² test.
+        Degrees of freedom = (|X|-1)*(|Y|-1)*prod(|Z_i|) for each conditioning state.
+        """
+        tables = self._contingency_table(df)
+        g2_stat = self.get_dependence(df)
+        # Compute df
+        df_total = 0
+        for table in tables.values():
+            r, c = table.shape
+            df_total += (r - 1) * (c - 1)
+        pval = 1 - chi2.cdf(g2_stat, df_total)
+        return pval
 
-    return pValue 
 
-def gsq_CI_test(data, X, Y, S, alpha=0.05) -> bool:
-    """
-    Test conditional independence with G² (likelihood ratio chi-squared) test using CIT.
 
-    Args:
-        data: pandas DataFrame with the variables (assumed categorical, ideally binary).
-        X (str): name of first variable.
-        Y (str): name of second variable.
-        S (list[str] or None): conditioning set variable names.
-        alpha (float): significance threshold.
 
-    Returns:
-        bool: True if X _independent_ of Y given S (p > alpha), else False.
-    """
-    # Convert DataFrame to numpy array
-    data_np = data.to_numpy()
 
-    # Map variable names to indices in the numpy array
-    var_idx = {var: idx for idx, var in enumerate(data.columns)}
 
-    # Create G² CIT instance
-    gsq_obj = CIT(data_np, "gsq")
 
-    # Convert variable names to indices
-    x_idx = var_idx[X]
-    y_idx = var_idx[Y]
-    s_idx = [var_idx[s] for s in S] if S else []
 
-    # Run the G² test
-    pValue = gsq_obj(x_idx, y_idx, s_idx)
+# from causallearn.utils.cit import CIT
 
-    return pValue 
+# def fisherz_CI_test(data, X, Y, S, alpha = 0.05) -> bool:
+#     """
+#     Test conditional independence with Fisher Z test using CIT.
 
-def chi2_CI_test(data, X, Y, S, alpha=0.05) -> bool:
-    """
-    Test conditional independence with Pearson Chi-squared test using CIT.
+#     Args:
+#         data: pandas DataFrame with the variables.
+#         X (str): name of first variable.
+#         Y (str): name of second variable.
+#         S (list[str] or None): conditioning set variable names.
+#         alpha (float): significance threshold.
 
-    Args:
-        data: pandas DataFrame with the variables (assumed categorical, ideally binary).
-        X (str): name of first variable.
-        Y (str): name of second variable.
-        S (list[str] or None): conditioning set variable names.
-        alpha (float): significance threshold.
+#     Returns:
+#         bool: True if X _independent_ of Y given S (p > alpha), else False.
+#     """
+#     # Convert DataFrame to numpy array
+#     data_np = data.to_numpy()
 
-    Returns:
-        bool: True if X _independent_ of Y given S (p > alpha), else False.
-    """
-    # Convert DataFrame to numpy array
-    data_np = data.to_numpy()
+#     # Map variable names to indices in the numpy array
+#     var_idx = {var: idx for idx, var in enumerate(data.columns)}
 
-    # Map variable names to indices in the numpy array
-    var_idx = {var: idx for idx, var in enumerate(data.columns)}
+#     fisherz_obj = CIT(data_np, "fisherz")
 
-    # Create Chi-squared CIT instance
-    chi2_obj = CIT(data_np, "chisq")
+#     # Convert variable names X, Y, S to indices
+#     x_idx = var_idx[X]
+#     y_idx = var_idx[Y]
+#     s_idx = [var_idx[s] for s in S] if S else []
 
-    # Convert variable names to indices
-    x_idx = var_idx[X]
-    y_idx = var_idx[Y]
-    s_idx = [var_idx[s] for s in S] if S else []
+#     pValue = fisherz_obj(x_idx, y_idx, s_idx)
 
-    # Run the chi-squared test
-    pValue = chi2_obj(x_idx, y_idx, s_idx)
+#     return pValue 
 
-    return pValue 
+# def gsq_CI_test(data, X, Y, S, alpha=0.05) -> bool:
+#     """
+#     Test conditional independence with G² (likelihood ratio chi-squared) test using CIT.
 
-def kci_CI_test(data, X, Y, S, alpha=0.05) -> bool:
-    """
-    Test conditional independence using the Kernel-based Conditional Independence (KCI) test.
+#     Args:
+#         data: pandas DataFrame with the variables (assumed categorical, ideally binary).
+#         X (str): name of first variable.
+#         Y (str): name of second variable.
+#         S (list[str] or None): conditioning set variable names.
+#         alpha (float): significance threshold.
 
-    Args:
-        data: pandas DataFrame with the variables (continuous or mixed-type).
-        X (str): name of first variable.
-        Y (str): name of second variable.
-        S (list[str] or None): conditioning set variable names.
-        alpha (float): significance threshold.
+#     Returns:
+#         bool: True if X _independent_ of Y given S (p > alpha), else False.
+#     """
+#     # Convert DataFrame to numpy array
+#     data_np = data.to_numpy()
 
-    Returns:
-        bool: True if X _independent_ of Y given S (p > alpha), else False.
-    """
-    # Convert DataFrame to numpy array
-    data_np = data.to_numpy()
+#     # Map variable names to indices in the numpy array
+#     var_idx = {var: idx for idx, var in enumerate(data.columns)}
 
-    # Map variable names to indices in the numpy array
-    var_idx = {var: idx for idx, var in enumerate(data.columns)}
+#     # Create G² CIT instance
+#     gsq_obj = CIT(data_np, "gsq")
 
-    # Create KCI CIT instance
-    kci_obj = CIT(data_np, "kci")
+#     # Convert variable names to indices
+#     x_idx = var_idx[X]
+#     y_idx = var_idx[Y]
+#     s_idx = [var_idx[s] for s in S] if S else []
 
-    # Convert variable names to indices
-    x_idx = var_idx[X]
-    y_idx = var_idx[Y]
-    s_idx = [var_idx[s] for s in S] if S else []
+#     # Run the G² test
+#     pValue = gsq_obj(x_idx, y_idx, s_idx)
 
-    # Run the KCI test
-    pValue = kci_obj(x_idx, y_idx, s_idx)
+#     return pValue 
 
-    return pValue 
+# def chi2_CI_test(data, X, Y, S, alpha=0.05) -> bool:
+#     """
+#     Test conditional independence with Pearson Chi-squared test using CIT.
+
+#     Args:
+#         data: pandas DataFrame with the variables (assumed categorical, ideally binary).
+#         X (str): name of first variable.
+#         Y (str): name of second variable.
+#         S (list[str] or None): conditioning set variable names.
+#         alpha (float): significance threshold.
+
+#     Returns:
+#         bool: True if X _independent_ of Y given S (p > alpha), else False.
+#     """
+#     # Convert DataFrame to numpy array
+#     data_np = data.to_numpy()
+
+#     # Map variable names to indices in the numpy array
+#     var_idx = {var: idx for idx, var in enumerate(data.columns)}
+
+#     # Create Chi-squared CIT instance
+#     chi2_obj = CIT(data_np, "chisq")
+
+#     # Convert variable names to indices
+#     x_idx = var_idx[X]
+#     y_idx = var_idx[Y]
+#     s_idx = [var_idx[s] for s in S] if S else []
+
+#     # Run the chi-squared test
+#     pValue = chi2_obj(x_idx, y_idx, s_idx)
+
+#     return pValue 
+
+# def kci_CI_test(data, X, Y, S, alpha=0.05) -> bool:
+#     """
+#     Test conditional independence using the Kernel-based Conditional Independence (KCI) test.
+
+#     Args:
+#         data: pandas DataFrame with the variables (continuous or mixed-type).
+#         X (str): name of first variable.
+#         Y (str): name of second variable.
+#         S (list[str] or None): conditioning set variable names.
+#         alpha (float): significance threshold.
+
+#     Returns:
+#         bool: True if X _independent_ of Y given S (p > alpha), else False.
+#     """
+#     # Convert DataFrame to numpy array
+#     data_np = data.to_numpy()
+
+#     # Map variable names to indices in the numpy array
+#     var_idx = {var: idx for idx, var in enumerate(data.columns)}
+
+#     # Create KCI CIT instance
+#     kci_obj = CIT(data_np, "kci")
+
+#     # Convert variable names to indices
+#     x_idx = var_idx[X]
+#     y_idx = var_idx[Y]
+#     s_idx = [var_idx[s] for s in S] if S else []
+
+#     # Run the KCI test
+#     pValue = kci_obj(x_idx, y_idx, s_idx)
+
+#     return pValue 
 
 
 
