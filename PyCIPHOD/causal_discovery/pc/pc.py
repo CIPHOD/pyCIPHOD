@@ -1,7 +1,8 @@
 import pandas as pd
 from itertools import combinations
+
 from utils.graphs.partially_specified_graphs import CompletedPartiallyDirectedAcyclicGraph
-from utils.independence_tests.basic import CiTests
+from utils.independence_tests.basic import CiTests, FisherZ
 from utils.background_knowledge.background_knowledge import BackgroundKnowledge
 
 
@@ -19,7 +20,7 @@ class PC:
         sepset (dict): Separation sets for node pairs in the skeleton.
     """
 
-    def __init__(self, data: pd.DataFrame, sparsity: float, ci_test: CiTests, background_knowledge : BackgroundKnowledge = None):
+    def __init__(self, data: pd.DataFrame,  sparsity: float = 0.05, ci_test: CiTests = FisherZ, background_knowledge: BackgroundKnowledge = None):
         """Initialize PC algorithm with data, sparsity threshold, and CI test."""
         self._data = data
         self._sparsity = sparsity
@@ -28,9 +29,7 @@ class PC:
 
         self._nodes = list(data.columns)
         self.cpdag = CompletedPartiallyDirectedAcyclicGraph()
-        self.cpdag.add_undirected_edges_from(list(combinations(self._nodes, 2)))
 
-        # Public attributes
         self.nb_ci_tests = 0
         self.sepset = dict()
 
@@ -39,6 +38,7 @@ class PC:
         Construct the skeleton of the graph using an order-independent approach
         following Colombo & Maathuis (2014). Iteratively removes edges based on CI tests.
         """
+        self.cpdag.add_undirected_edges_from(list(combinations(self._nodes, 2)))
         s = 0
         repeat = True
         while repeat:
@@ -53,8 +53,8 @@ class PC:
                             self.nb_ci_tests += 1
                             if test.get_pvalue(self._data) > self._sparsity:
                                 self.cpdag.remove_undirected_edge(x, y)
-                                self.sepset[(x, y)] = S
-                                self.sepset[(y, x)] = S
+                                self.sepset[(x, y)] = self.sepset[(y, x)] = S
+                                break
             s += 1
             
     
@@ -64,7 +64,7 @@ class PC:
         1) Remove forbidden edges and add mandatory edges in the skeleton.
         2) Orient edges according to mandatory and forbidden orientations if present.
         """
-        if not self._bk :
+        if not self._bk:
             return 
 
         # --- Step 1: enforce mandatory and forbidden edges ---
@@ -125,22 +125,22 @@ class PC:
         changed = False
         adj = {x: self.cpdag.get_adjacencies(x) for x in self._nodes}
         
-        for x in self._nodes :
-            for y in adj[x] :
-                # Rule 1 :
-                for z in set(adj[y]) - set(adj[x]) :
-                    if (x,y) in self.cpdag.get_directed_edges() and (y,z) in self.cpdag.get_undirected_edges() :
+        for x in self._nodes:
+            for y in adj[x]:
+                # Rule 1:
+                for z in set(adj[y]) - set(adj[x]):
+                    if (x,y) in self.cpdag.get_directed_edges() and (y,z) in self.cpdag.get_undirected_edges():
                         changed = True
                         self.cpdag.remove_undirected_edge(z, y)
                         self.cpdag.add_directed_edge(y, z)
-                # Rule 2 :
-                for z in set(adj[y]) & set(adj[x]) :
-                    if (x,y) in self.cpdag.get_directed_edges() and (y,z) in self.cpdag.get_directed_edges() and (x,z) in self.cpdag.get_undirected_edges() :
+                # Rule 2:
+                for z in set(adj[y]) & set(adj[x]):
+                    if (x,y) in self.cpdag.get_directed_edges() and (y,z) in self.cpdag.get_directed_edges() and (x,z) in self.cpdag.get_undirected_edges():
                         changed = True
                         self.cpdag.remove_undirected_edge(x, z)
                         self.cpdag.add_directed_edge(x, z)
         
-        # Rule 3 : 
+        # Rule 3: 
         for x in self._nodes:
             for y in adj[x]:
                 if (x, y) not in self.cpdag.get_directed_edges():

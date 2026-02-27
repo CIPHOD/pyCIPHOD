@@ -1,11 +1,15 @@
+from itertools import combinations
 from utils.graphs.graphs import Graph
-from utils.independence_tests.basics import fisherz_CI_test, gsq_CI_test, chi2_CI_test, kci_CI_test
-
+from causallearn.utils.cit import CIT
 
 import pandas as pd
 import networkx as nx 
+import matplotlib.pyplot as plt
 import numpy as np 
-from itertools import combinations
+
+import pandas as pd
+import time
+from sklearn.linear_model import LinearRegression
 
 
 
@@ -13,7 +17,171 @@ from itertools import combinations
 
 
 class LocPC:
-    def __init__(self, data, target_node, sepset=None, CI_test="fisherz", alpha=0.05, forbidden_edges: list = [], display = True):
+    ### CI TESTS METHODS ###
+    @staticmethod
+    def dsep_test(data, X, Y, S, alpha=0.05, true_graph=None):
+        """
+        D-separation oracle based on true_graph (a DAG in NetworkX).
+
+        Returns a "perfect" p-value:
+        - 0 if X and Y are d-separated (independent)
+        - 1 if X and Y are not d-separated (dependent)
+        """
+        # Ensure S is a set
+        S = set(S)
+
+        print(f"[DEBUG] Testing d-separation:")
+        print(f"        X = {X}, Y = {Y}, S = {S}")
+        print(f"        Graph has {true_graph.number_of_nodes()} nodes and {true_graph.number_of_edges()} edges")
+
+        # Check d-separation
+        dsep = nx.d_separated(true_graph, {X}, {Y}, S)
+
+        print(f"        d-separated? {dsep}")
+
+        # Perfect oracle: p=0 if independent, p=1 if dependent
+        p_value = 1 if dsep else 0
+        print(f"        Returning p-value = {p_value}\n")
+
+        return p_value
+        
+    @staticmethod
+    def fisherz_CI_test(data, X, Y, S, alpha = 0.05, true_graph = None) -> bool:
+        """
+        Test conditional independence with Fisher Z test using CIT.
+
+        Args:
+            data: pandas DataFrame with the variables.
+            X (str): name of first variable.
+            Y (str): name of second variable.
+            S (list[str] or None): conditioning set variable names.
+            alpha (float): significance threshold.
+
+        Returns:
+            bool: True if X _independent_ of Y given S (p > alpha), else False.
+        """
+        # Convert DataFrame to numpy array
+        data_np = data.to_numpy()
+
+        # Map variable names to indices in the numpy array
+        var_idx = {var: idx for idx, var in enumerate(data.columns)}
+
+        fisherz_obj = CIT(data_np, "fisherz")
+
+        # Convert variable names X, Y, S to indices
+        x_idx = var_idx[X]
+        y_idx = var_idx[Y]
+        s_idx = [var_idx[s] for s in S] if S else []
+
+        pValue = fisherz_obj(x_idx, y_idx, s_idx)
+
+        return pValue 
+    
+    @staticmethod
+    def gsq_CI_test(data, X, Y, S, alpha=0.05, true_graph = None) -> bool:
+        """
+        Test conditional independence with G² (likelihood ratio chi-squared) test using CIT.
+
+        Args:
+            data: pandas DataFrame with the variables (assumed categorical, ideally binary).
+            X (str): name of first variable.
+            Y (str): name of second variable.
+            S (list[str] or None): conditioning set variable names.
+            alpha (float): significance threshold.
+
+        Returns:
+            bool: True if X _independent_ of Y given S (p > alpha), else False.
+        """
+        # Convert DataFrame to numpy array
+        data_np = data.to_numpy()
+
+        # Map variable names to indices in the numpy array
+        var_idx = {var: idx for idx, var in enumerate(data.columns)}
+
+        # Create G² CIT instance
+        gsq_obj = CIT(data_np, "gsq")
+
+        # Convert variable names to indices
+        x_idx = var_idx[X]
+        y_idx = var_idx[Y]
+        s_idx = [var_idx[s] for s in S] if S else []
+
+        # Run the G² test
+        pValue = gsq_obj(x_idx, y_idx, s_idx)
+
+        return pValue 
+    
+    @staticmethod
+    def chi2_CI_test(data, X, Y, S, alpha=0.05, true_graph = None) -> bool:
+        """
+        Test conditional independence with Pearson Chi-squared test using CIT.
+
+        Args:
+            data: pandas DataFrame with the variables (assumed categorical, ideally binary).
+            X (str): name of first variable.
+            Y (str): name of second variable.
+            S (list[str] or None): conditioning set variable names.
+            alpha (float): significance threshold.
+
+        Returns:
+            bool: True if X _independent_ of Y given S (p > alpha), else False.
+        """
+        # Convert DataFrame to numpy array
+        data_np = data.to_numpy()
+
+        # Map variable names to indices in the numpy array
+        var_idx = {var: idx for idx, var in enumerate(data.columns)}
+
+        # Create Chi-squared CIT instance
+        chi2_obj = CIT(data_np, "chisq")
+
+        # Convert variable names to indices
+        x_idx = var_idx[X]
+        y_idx = var_idx[Y]
+        s_idx = [var_idx[s] for s in S] if S else []
+
+        # Run the chi-squared test
+        pValue = chi2_obj(x_idx, y_idx, s_idx)
+
+        return pValue 
+
+    @staticmethod
+    def kci_CI_test(data, X, Y, S, alpha=0.05, true_graph = None) -> bool:
+        """
+        Test conditional independence using the Kernel-based Conditional Independence (KCI) test.
+
+        Args:
+            data: pandas DataFrame with the variables (continuous or mixed-type).
+            X (str): name of first variable.
+            Y (str): name of second variable.
+            S (list[str] or None): conditioning set variable names.
+            alpha (float): significance threshold.
+
+        Returns:
+            bool: True if X _independent_ of Y given S (p > alpha), else False.
+        """
+        # Convert DataFrame to numpy array
+        data_np = data.to_numpy()
+
+        # Map variable names to indices in the numpy array
+        var_idx = {var: idx for idx, var in enumerate(data.columns)}
+
+        # Create KCI CIT instance
+        kci_obj = CIT(data_np, "kci")
+
+        # Convert variable names to indices
+        x_idx = var_idx[X]
+        y_idx = var_idx[Y]
+        s_idx = [var_idx[s] for s in S] if S else []
+
+        # Run the KCI test
+        pValue = kci_obj(x_idx, y_idx, s_idx)
+
+        return pValue 
+    
+    ### LOCPC ###
+
+    def __init__(self, data, target_node, sepset=None, CI_test="fisherz", true_graph = None, alpha=0.05, forbidden_edges: list = [], display = True, knwon_tests = None):
         """
         Initialize a Local PC (LocPC) algorithm instance for local causal discovery.
 
@@ -65,6 +233,7 @@ class LocPC:
         self.alpha = alpha
         self.forb = forbidden_edges
         self.sepset = sepset if sepset is not None else {}
+        self.known_tests = knwon_tests if knwon_tests is not None else {}
 
         # --- Symmetrize sepset ---
         symmetric_sepset = {}
@@ -76,16 +245,20 @@ class LocPC:
 
         # --- CI test selection ---
         if CI_test == "fisherz":
-            self.CI_test = fisherz_CI_test
+            self.CI_test = self.fisherz_CI_test
         elif CI_test == "gsq":
-            self.CI_test = gsq_CI_test
+            self.CI_test = self.gsq_CI_test
         elif CI_test == "kci":
-            self.CI_test = kci_CI_test
+            self.CI_test = self.kci_CI_test
         elif CI_test == "chisq" :
-            self.CI_test = chi2_CI_test
+            self.CI_test = self.chi2_CI_test
+        elif CI_test == "oracle":
+            self.CI_test = self.dsep_test
         else:
-            raise ValueError(f"Unsupported CI_test '{CI_test}'. Choose from 'fisherz', 'gsq', 'chisq', or 'kci'.")
+            raise ValueError(f"Unsupported CI_test '{CI_test}'. Choose from 'fisherz', 'gsq', 'chisq', 'kci', or 'oracle'.")
 
+        # For oracle 
+        self.true_graph = true_graph
         # --- Internal state ---
         self.visited = []
         self.leg = None
@@ -143,7 +316,12 @@ class LocPC:
                             sel_columns = list(S) + [D,B]
                             test_data = self.data2observed_data(self.data, sel_columns)
                             self.size_tests.append(len(test_data))
-                            p_val = self.CI_test(test_data, D, B, list(S), alpha = self.alpha) 
+                            if (D,B,S) in self.known_tests :
+                                p_val = self.known_tests[(D,B,S)]
+                            else : 
+                                p_val = self.CI_test(test_data, D, B, list(S), alpha = self.alpha, true_graph = self.true_graph) 
+                                self.known_tests[(D,B,S)] = p_val
+                                self.known_tests[(B,D,S)] = p_val
                             if p_val > self.alpha : 
                                 self.pvalues[(D,B)] = p_val 
                                 self.pvalues[(B,D)] = p_val
@@ -159,7 +337,7 @@ class LocPC:
             if not cont:
                 break
         for D in D_set : 
-            for B in [x for x in self.v if x != D] :
+            for B in [x for x in self.visited if x != D] :
                 if (D,B) not in self.sepset :
                     self.sepset[(D,B)] = None
                     self.sepset[(B,D)] = None
@@ -209,7 +387,7 @@ class LocPC:
             a, b, c = triplet[0], triplet[1], triplet[2]
             if (c,b,a) in self.UCs : 
                 continue 
-            if (a in self.neighborhood_h or c in self.neighborhood_h) and (b not in self.sepset[(a, c)]):
+            if (a in self.neighborhood_h and b in self.neighborhood_h and c in self.neighborhood_h) and (b not in self.sepset[(a, c)]):
                 # if (b,c) in self.leg.get_directed_edges() or (b,a) in self.leg.get_directed_edges() :
                 #    continue
                 self._undirected2collider(a,b,c)
@@ -217,33 +395,23 @@ class LocPC:
         
     def _conflicts_max_UCs(self):
         # ref : Improving Accuracy and Scalability of the PC Algorithm by Maximizing P-value1, RAMSEY
-        print("Finding unshielded triplets...")
         unshielded_triplets = self._find_unshielded_triplets()
-        print(f"Found {len(unshielded_triplets)} unshielded triplets.")
-
         triplets_pval = dict()
         for triplet in unshielded_triplets:
             a, b, c = triplet
             if (c, b, a) in self.UCs:
-                print(f"Skipping symmetric triplet: {(c, b, a)} already in UCs")
                 continue
             key = (a, c) if (a, c) in self.pvalues else (c, a)
             if key in self.pvalues:
                 triplets_pval[triplet] = self.pvalues[key]
-                print(f"Triplet {triplet} has p-value {self.pvalues[key]}")
 
         sorted_triplets = sorted(triplets_pval, key=lambda x: triplets_pval[x], reverse=True)
-        print("Triplets sorted by decreasing p-value.")
 
         for triplet in sorted_triplets:
             a, b, c = triplet
-            print(f"Processing triplet: {triplet}")
-            if (a in self.neighborhood_h or c in self.neighborhood_h) and b not in self.sepset.get((a, c), set()):
-                print(f"Triplet {triplet} is in local neighborhood and b not in sepset.")
+            if (a in self.neighborhood_h and b in self.neighborhood_h and c in self.neighborhood_h) and (b not in self.sepset.get((a, c), set())):
                 if ((b, c) in self.leg.get_directed_edges() or (b, a) in self.leg.get_directed_edges()):
-                    print(f"Skipping triplet {triplet} due to existing directed edges.")
                     continue
-                print(f"Orienting {triplet} as a collider.")
                 self._undirected2collider(a, b, c)
                 
 
@@ -271,9 +439,8 @@ class LocPC:
                     Dk = a
                 else:
                     continue  
-                
-                in_neighborhood = [x not in self.neighborhood_h for x in (Di, Dj, Dk)]
-                if in_neighborhood.count(True) > 1:
+                out_of_neighborhood = [x not in self.neighborhood_h for x in (Di, Dj, Dk)]
+                if out_of_neighborhood.count(True) > 0:
                     continue
 
                 if Dk not in self.leg.get_adjacencies(Di):
@@ -301,7 +468,7 @@ class LocPC:
             for Dk in [v for (u, v) in self.leg.get_directed_edges() if u == Dj]:
                 # Check if at most one of Di, Dj, Dk is outside the neighborhood
                 out_of_neighborhood = [x not in self.neighborhood_h for x in (Di, Dj, Dk)]
-                if out_of_neighborhood.count(True) > 1:
+                if out_of_neighborhood.count(True) > 0:
                     continue
 
                 if Dk in self.leg.get_adjacencies(Di):
@@ -343,7 +510,7 @@ class LocPC:
                         # Condition "au plus 1 en dehors"
                         nodes_to_check = [Di, Dj, Dl, Dk]
                         out_of_neighborhood = [n not in self.neighborhood_h for n in nodes_to_check]
-                        if out_of_neighborhood.count(True) > 1:
+                        if out_of_neighborhood.count(True) > 0:
                             continue
 
                         if (
@@ -404,7 +571,7 @@ class LocPC:
             if self._meek_rule3():
                changed = True
 
-    def runLocPC(self, h, solve_conflicts_max = False):
+    def runLocPC(self, h, solve_conflicts_max = True):
         """
         Run the Local PC (LocPC) algorithm up to h hops from the target node.
 
@@ -437,6 +604,7 @@ class LocPC:
                 if D not in self.visited:
                     self.visited.append(D)
                     self.neighborhood_h.append(D)
+                    # for B in [x for x in self.v if x not in self.visited]:
                     for B in [x for x in self.v if x not in self.visited]:
                         # Apply background knowledge (BGK)
                         if (B, D) in self.forb and (D, B) not in self.forb:
@@ -515,7 +683,60 @@ class LocPC:
         return True
     
     
-    
+    def draw_graph(self):
+        treatment = self.visited 
+        outcome = self.target_node
+        vertex_color = "lightblue"
+        font_color = "black"
+        directed_edge_color = "gray"
+        confounded_edge_color = "black"
+        undirected_edge_color = "black"
+        uncertain_edge_color = "#F7B617"
+        treatment_color = "#c82804"
+        outcome_color = "#4851a1"
+
+        all_nodes = list(self._g.nodes)
+        outcome = set(outcome or [])
+        treatment = set(treatment or [])
+        non_outcome_nodes = [n for n in all_nodes if n not in outcome]
+
+        # Layout
+        circular_pos = nx.circular_layout(self._g.subgraph(non_outcome_nodes))
+        center = np.array([0.0, 0.0])
+        pos = {n: center for n in outcome}
+        pos.update(circular_pos)
+
+        fig, ax = plt.subplots()
+
+        nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(treatment), node_color=treatment_color)
+        nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(outcome), node_color=outcome_color)
+
+        set_vertices = set(self._g.nodes) - treatment - outcome
+        nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(set_vertices), node_color=vertex_color)
+        nx.draw_networkx_labels(self._g, pos, ax=ax, font_color=font_color)
+
+        acyclic_edges = [edge for edge in self.get_directed_edges() if (edge[1], edge[0]) not in self.get_directed_edges()]
+        cyclic_edges = [edge for edge in self.get_directed_edges() if (edge[1], edge[0]) in self.get_directed_edges()]
+        confounded_edges = self.get_confounded_edges()
+        undirected_edges = self.get_undirected_edges()
+
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=acyclic_edges, edge_color=directed_edge_color, arrowstyle='->')
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=cyclic_edges, edge_color=directed_edge_color, arrowstyle='->')
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=confounded_edges, arrowstyle='<|-|>', edge_color=confounded_edge_color)
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=undirected_edges, arrowstyle='-', edge_color=undirected_edge_color)
+
+        dashed_arrow = [(u, v) for (u, v, t) in self.get_edges() if t == '-->']
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=dashed_arrow, edge_color=uncertain_edge_color,
+                            style='dashed', arrowstyle='->')
+
+        arrow_double_bar = [(u, v) for (u, v, t) in self.get_edges() if t == '-||']
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=arrow_double_bar, edge_color="red",
+                            style='solid', arrowstyle='-[')
+
+        plt.axis('off')
+    plt.show()
+
+
     
 
 def runLocPC_CDE(data, treatment, outcome, alpha=0.05, CI_test="fisherz", linear_estimation=False, known_sepset=None, return_leg=True, forbidden_edges=[], display = True):
@@ -553,10 +774,6 @@ def runLocPC_CDE(data, treatment, outcome, alpha=0.05, CI_test="fisherz", linear
         TypeError: For incorrect input types.
         ValueError: If required variables are missing from the data.
     """
-    import pandas as pd
-    import time
-    from sklearn.linear_model import LinearRegression
-
     # --- Input checks ---
     if not isinstance(data, pd.DataFrame):
         raise TypeError("data must be a pandas DataFrame.")
@@ -642,5 +859,6 @@ def runLocPC_CDE(data, treatment, outcome, alpha=0.05, CI_test="fisherz", linear
     result['discovered_hop'] = h
 
     return result
+
 
 

@@ -1,5 +1,6 @@
 #%%
 from pc import PC
+from causal_discovery.local.locpc import LocPC
 from utils.independence_tests.basic import FisherZ, Gsq
 from utils.background_knowledge.background_knowledge import BackgroundKnowledge
 import numpy as np
@@ -46,3 +47,6 @@ pc_disc = PC(df_disc, 0.05, ci_test=Gsq)
 pc_disc.run()
 pc_disc.cpdag.draw_graph({}, {})
 # %%
+
+
+loc = LocPC()
