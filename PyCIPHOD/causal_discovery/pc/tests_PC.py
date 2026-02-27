@@ -1,9 +1,12 @@
 #%%
 from pc import PC
 from utils.independence_tests.basic import FisherZ, Gsq
+from utils.background_knowledge.background_knowledge import BackgroundKnowledge
 import numpy as np
 import pandas as pd
 
+bk = BackgroundKnowledge()
+bk.add_mandatory_orientation('W', 'X')
 
 nodes = ["X", "Y", "Z", "W"]
 n = 1000
@@ -16,9 +19,9 @@ epsilon = np.random.randn(n, 4)
 df_cont = pd.DataFrame(epsilon @ np.linalg.inv(np.eye(4) - B).T, columns=nodes)
 
 # Run PC with FisherZ
-pc_cont = PC(df_cont, 0.05, ci_test=FisherZ)
+pc_cont = PC(df_cont, 0.05, ci_test=FisherZ, background_knowledge=bk)
 pc_cont.run()
-pc_cont._cpdag.draw_graph({}, {})
+pc_cont.cpdag.draw_graph({}, {})
 
 # --- Discrete binary SCM for G² ---
 # Exogenous variable
@@ -41,5 +44,5 @@ df_disc = pd.DataFrame({"X": X, "Y": Y, "Z": Z, "W": W})
 # Run PC with G²
 pc_disc = PC(df_disc, 0.05, ci_test=Gsq)
 pc_disc.run()
-pc_disc._cpdag.draw_graph({}, {})
+pc_disc.cpdag.draw_graph({}, {})
 # %%
