@@ -1,7 +1,6 @@
-from utils.graphs.graphs import Graph
-from utils.graphs.graphs import DirectedMixedGraph
-from utils.graphs.graphs import AcyclicDirectedMixedGraph
-from utils.graphs.graphs import FullySpecifiedGraph
+from graphs import Graph
+from graphs import DirectedMixedGraph
+from graphs import AcyclicDirectedMixedGraph
 
 
 class PartiallySpecifiedGraph(Graph):
@@ -26,12 +25,12 @@ class SummaryCausalGraph(ClusterDirectedMixedGraph):
 
 class PartiallyDirectedGraphs(Graph):
     def __init__(self):
-        super().__init__()
+        1
 
 
 class CompletedPartiallyDirectedAcyclicGraph(PartiallyDirectedGraphs):
     def __init__(self):
-        super().__init__()
+        1
 
 
 class PartialAncestralGraphs(PartiallyDirectedGraphs):

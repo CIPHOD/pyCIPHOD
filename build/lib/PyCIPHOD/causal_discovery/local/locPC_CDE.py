@@ -118,14 +118,14 @@ class LocPC:
             adj = {}
             
             for D in D_set : # COLOMBO 
-                adj[D] = self.leg.get_adjacencies(D)
+                adj[D] = self.leg.get_all_adjacencies(D)
                 
             for D in D_set:
                 adj_D = list(adj[D])
                 if len(adj_D) >= s:
                     cont = True
 
-                for B in self.leg.get_adjacencies(D):
+                for B in self.leg.get_all_adjacencies(D):
                     
                     if (D, B) in self.sepset:
                         if self.sepset[(D, B)] is not None : 
@@ -176,11 +176,11 @@ class LocPC:
         undirected_edges = self.leg.get_undirected_edges()
         unshielded_triplets = []
         for a in self.v :
-            for b in self.leg.get_adjacencies(a) :
-                for c in self.leg.get_adjacencies(b) : 
+            for b in self.leg.get_all_adjacencies(a) :
+                for c in self.leg.get_all_adjacencies(b) : 
                     if c == a : 
                         continue
-                    if c not in self.leg.get_adjacencies(a) :
+                    if c not in self.leg.get_all_adjacencies(a) :
                        unshielded_triplets.append((a,b,c))
         return unshielded_triplets
 
@@ -276,7 +276,7 @@ class LocPC:
                 if in_neighborhood.count(True) > 1:
                     continue
 
-                if Dk not in self.leg.get_adjacencies(Di):
+                if Dk not in self.leg.get_all_adjacencies(Di):
                     undirected_edges = self.leg.get_undirected_edges()
                     for edge in [(Dj, Dk), (Dk, Dj)]:
                         if edge in undirected_edges:
@@ -304,7 +304,7 @@ class LocPC:
                 if out_of_neighborhood.count(True) > 1:
                     continue
 
-                if Dk in self.leg.get_adjacencies(Di):
+                if Dk in self.leg.get_all_adjacencies(Di):
                     if (Di, Dk) in self.leg.get_directed_edges():
                         continue
                     else:
@@ -336,8 +336,8 @@ class LocPC:
                 for Dl in directed_preds[i+1:]:
                     if Dj == Dl:
                         continue
-                    common_neighbors = set(self.leg.get_adjacencies(Dj)).intersection(
-                        self.leg.get_adjacencies(Dl)
+                    common_neighbors = set(self.leg.get_all_adjacencies(Dj)).intersection(
+                        self.leg.get_all_adjacencies(Dl)
                     )
                     for Di in common_neighbors:
                         # Condition "au plus 1 en dehors"
@@ -371,7 +371,7 @@ class LocPC:
         non_neighborhood = set(self.v) - set(self.neighborhood_h)
         if len(non_neighborhood) > 1 :
             for D in self.neighborhood_h :
-                neighbors_D = set(self.leg.get_adjacencies(D))
+                neighbors_D = set(self.leg.get_all_adjacencies(D))
                 for A in neighbors_D.intersection(non_neighborhood) :
                     if (A,D) in self.leg.get_directed_edges() or (D,A) in self.leg.get_directed_edges() : 
                         break 
@@ -453,7 +453,7 @@ class LocPC:
 
             new_D_set = set()
             for D in D_set:
-                for x in self.leg.get_adjacencies(D):
+                for x in self.leg.get_all_adjacencies(D):
                     if x in self.visited or (D,x) in self.leg.get_directed_edges() or (x,D) in self.leg.get_directed_edges() :
                         continue
                     new_D_set.add(str(x))
@@ -481,7 +481,7 @@ class LocPC:
 
         while queue:
             current = queue.pop(0)
-            neighbors = set(self.leg.get_adjacencies(current)).intersection(self.visited)
+            neighbors = set(self.leg.get_all_adjacencies(current)).intersection(self.visited)
             for neighbor in neighbors:
                 if ((current, neighbor) not in self.leg.get_directed_edges() and 
                     (neighbor, current) not in self.leg.get_directed_edges()):
@@ -505,7 +505,7 @@ class LocPC:
         for D in subset:
             # Condition 1:
             set_cond_2 = []
-            for A in set(self.leg.get_adjacencies(D)) - set(subset):
+            for A in set(self.leg.get_all_adjacencies(D)) - set(subset):
                 if (D, A) in self.leg.get_undirected_edges() or (A, D) in self.leg.get_undirected_edges():
                     return False
                 if (D,A) in self.leg.get_uncertain_edges() : 
@@ -591,7 +591,7 @@ def runLocPC_CDE(data, treatment, outcome, alpha=0.05, CI_test="fisherz", linear
     # --- Run LocPC up to full discovery or identifiability ---
     while True:
         locpc.runLocPC(h)
-        if (Y, X) in locpc.leg.get_directed_edges() or X not in locpc.leg.get_adjacencies(Y):
+        if (Y, X) in locpc.leg.get_directed_edges() or X not in locpc.leg.get_all_adjacencies(Y):
             identifiability = True
             break
         D = locpc.find_subset_NOC()
@@ -604,7 +604,7 @@ def runLocPC_CDE(data, treatment, outcome, alpha=0.05, CI_test="fisherz", linear
 
     # --- Final identifiability check (fully oriented) ---
     if not identifiability:
-        for n in locpc.leg.get_adjacencies(Y):
+        for n in locpc.leg.get_all_adjacencies(Y):
             if (n, Y) not in locpc.leg.get_directed_edges() and (Y, n) not in locpc.leg.get_directed_edges():
                 break
         else:
