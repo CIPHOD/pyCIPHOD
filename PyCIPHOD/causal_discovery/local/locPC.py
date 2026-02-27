@@ -117,7 +117,10 @@ class LocPC:
                 if (d,a) not in self.leg.get_undirected_edges():
                     continue 
                 nnc = True
-                for w in set(self._nodes) - self._visited - set(self.leg.get_adjacencies(d)):
+                outside_nodes = set(self._nodes) - self._visited - set(self.leg.get_adjacencies(d))
+                if len(outside_nodes) == 0:
+                    continue
+                for w in outside_nodes:
                     if a in self.sepset[(d,w)]:
                         nnc = False
                         break
@@ -146,3 +149,69 @@ class LocPC:
             D_set = D_new
             k+=1
         self._orientation()
+        
+    
+    ### LOCPC-CDE PART 
+    
+    def _find_subset_NOC(self):
+        # Add assert if no target to run the algorithm before
+        subset = set(self._target)
+        queue = [self._target]
+        while queue:
+            current = queue.pop(0)
+            neighbors = set(self.leg.get_adjacencies(current)) & self._visited
+            for neighbor in neighbors:
+                if ((current, neighbor) not in self.leg.get_directed_edges() and 
+                    (neighbor, current) not in self.leg.get_directed_edges()):
+                    if neighbor not in subset:
+                        subset.add(neighbor)
+                        queue.append(neighbor)
+        return set(subset)
+    
+    def _non_orientability_criterion(self, subset):
+        for d in subset: 
+            set_condition_2 = []
+            for a in set(self.leg.get_adjacencies(d)) - subset:
+                # Condition 1:
+                if (d,a) in self.leg.get_undirected_edges():
+                    return False
+                # Condition 2:
+                if (d,a) in self.leg.get_uncertain_edges():
+                    set_condition_2.append(a)
+                    if len(set_condition_2) > 1:
+                        return False
+        return True   
+    
+    
+    
+    def run_locPC_CDE(self, treatment: str, outcome: str) -> dict:
+        h = 0
+        identifiability_CDE = False
+        
+        # Run the algorithm incrementally with hops
+        while True:
+            self.run(outcome, hop=h)
+            if self._non_orientability_criterion(self._find_subset_NOC()):
+                break # Stop if non-orientability criterion met
+            if (outcome, treatment) in self.leg.get_directed_edges() or treatment not in self.leg.get_adjacencies(outcome):
+                identifiability_CDE = True
+                break # Check on the relation between treatment and outcome
+            if len(self._visited) == len(self._nodes):
+                break # Stop if all nodes visited
+            h += 1
+        
+        if not identifiability_CDE: # Extra identifiability check if not flagged
+            for n in self.leg.get_adjacencies(outcome):
+                if (n, outcome) not in self.leg.get_directed_edges() and (outcome, n) not in self.leg.get_directed_edges():
+                    break
+            else:
+                identifiability_CDE = True # All adjacencies oriented, CDE identifiable
+        
+        adjustment_set = self.leg.get_parents(outcome) if identifiability_CDE else None # Compute adjustment set if identifiable
+        
+        return {
+            "treatment": treatment,
+            "outcome": outcome,
+            "identifiability": identifiability_CDE,
+            "adjustment_set": adjustment_set
+    }

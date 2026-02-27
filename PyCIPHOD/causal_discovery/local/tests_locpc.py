@@ -19,11 +19,10 @@ epsilon = np.random.randn(n, 4)
 df_cont = pd.DataFrame(epsilon @ np.linalg.inv(np.eye(4) - B).T, columns=nodes)
 
 # Run PC with FisherZ
-locpc = LocPC(data = df_cont, 
-              target_node="Y")
+locpc = LocPC(data = df_cont)
 
 # %%
-locpc.run(0)
+locpc.run("X",2)
 # %%
 locpc.leg.draw_graph({}, {})
 # %%
