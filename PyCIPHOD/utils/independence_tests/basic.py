@@ -144,6 +144,26 @@ class Gsq(CiTests):
 
 
 
+### MISSING DATA, TEST WISE DELETION 
+
+# class TWDFisherZ(CiTests):
+#     def __init__(self, x, y, cond_list=None):
+#         super().__init__(x, y, cond_list)
+#         self._fisherz = FisherZ(self.x, self.y, self.cond_list)
+
+#     def get_dependence(self, df):
+#         df_clean = df.dropna(subset=[self.x, self.y] + self.cond_list)
+#         if df_clean.shape[0] < len(self.cond_list) + 3:
+#             return np.nan
+#         return self._fisherz.get_dependence(df_clean)
+
+#     def get_pvalue(self, df):
+#         df_clean = df.dropna(subset=[self.x, self.y] + self.cond_list)
+#         if df_clean.shape[0] < len(self.cond_list) + 3:
+#             return np.nan
+#         return self._fisherz.get_pvalue(df_clean)
+
+
 
 
 class LinearRegression:

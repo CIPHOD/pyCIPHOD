@@ -20,13 +20,13 @@ class PC:
         sepset (dict): Separation sets for node pairs in the skeleton.
     """
 
-    def __init__(self, data: pd.DataFrame,  sparsity: float = 0.05, ci_test: CiTests = FisherZ, background_knowledge: BackgroundKnowledge = None):
+    def __init__(self, data: pd.DataFrame,  sparsity: float = 0.05, ci_test: CiTests = FisherZ, background_knowledge: BackgroundKnowledge = None, twd = False):
         """Initialize PC algorithm with data, sparsity threshold, and CI test."""
         self._data = data
         self._sparsity = sparsity
         self._ci_test = ci_test
         self._bk = background_knowledge
-
+        self._twd = twd # Test wise deletion
         self._nodes = list(data.columns)
         self.cpdag = CompletedPartiallyDirectedAcyclicGraph()
 
@@ -39,6 +39,7 @@ class PC:
         following Colombo & Maathuis (2014). Iteratively removes edges based on CI tests.
         """
         self.cpdag.add_undirected_edges_from(list(combinations(self._nodes, 2)))
+        data_test = self._data
         s = 0
         repeat = True
         while repeat:
@@ -51,7 +52,9 @@ class PC:
                         for S in combinations([a for a in adj[x] if a != y], s):
                             test = self._ci_test(x, y, list(S))
                             self.nb_ci_tests += 1
-                            if test.get_pvalue(self._data) > self._sparsity:
+                            if self._twd:
+                                data_test = self._data.dropna(subset=[x, y] + list(S))
+                            if test.get_pvalue(data_test) > self._sparsity:
                                 self.cpdag.remove_undirected_edge(x, y)
                                 self.sepset[(x, y)] = self.sepset[(y, x)] = S
                                 break

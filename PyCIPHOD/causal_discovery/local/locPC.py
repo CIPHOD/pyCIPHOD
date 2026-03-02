@@ -7,22 +7,24 @@ from utils.background_knowledge.background_knowledge import BackgroundKnowledge
 
 
 class LocPC:
-    def __init__(self, data: pd.DataFrame, sparsity: float = 0.05, ci_test: CiTests = FisherZ, background_knowledge: BackgroundKnowledge = None):
+    def __init__(self, data: pd.DataFrame, sparsity: float = 0.05, ci_test: CiTests = FisherZ, background_knowledge: BackgroundKnowledge = None, twd = False):
         self._data = data
         self._sparsity = sparsity
         self._ci_test = ci_test
         self._bk = background_knowledge
         self._knowntests = {}
-        
+        self._twd = twd
         self._nodes = list(data.columns)
-
+        
         self.nb_ci_tests = 0
         self.sepset = dict()
+        self.non_descendants = background_knowledge.get_non_descendants()
     
     def _update_skeleton(self, D_set):
         for d in D_set: 
             for b in [x for x in self._nodes if (x not in self._visited) and x!=d]: 
                 self.leg.add_undirected_edge(d,b)
+        data_test = self._data
         s = 0
         repeat = True 
         while repeat: 
@@ -32,14 +34,16 @@ class LocPC:
                 self._visited.add(d)
                 if len(adj[d]) - 1 >= s:
                     repeat = True
-                    for b in adj[d]:
+                    for b in [x for x in adj[d] if x not in (self._visited & self.non_descendants[d])]:
                         for S in combinations([a for a in adj[d] if a != b], s):
                             if (d,b,S) in self._knowntests:
                                 p_val = self._knowntests[(d,b,S)]
                             else:
                                 test = self._ci_test(d,b,list(S))
                                 self.nb_ci_tests += 1
-                                p_val = test.get_pvalue(self._data)
+                                if self._twd:
+                                    data_test = self._data.dropna(subset=[d, b] + list(S))
+                                p_val = test.get_pvalue(data_test)
                                 self._knowntests[(d,b,S)] = self._knowntests[(b,d,S)] = p_val
                             if p_val > self._sparsity: 
                                 self.leg.remove_undirected_edge(d,b)
@@ -55,6 +59,46 @@ class LocPC:
 
         return D_new - self._visited
     
+    def _apply_background_knowledge(self):
+        """
+        Apply background knowledge constraints to the leg:
+        1) Remove forbidden edges and add mandatory edges in the skeleton.
+        2) Orient edges according to mandatory and forbidden orientations if present.
+        """
+        if not self._bk:
+            return 
+
+        # --- Step 1: enforce mandatory and forbidden edges ---
+        # Remove forbidden edges if present
+        # for u, v in self._bk.get_forbidden_edges():
+        #     if (u, v) in self.leg.get_undirected_edges() or (v, u) in self.leg.get_undirected_edges():
+        #         self.leg.remove_undirected_edge(u, v)
+        #         self.leg.remove_undirected_edge(v, u)
+
+        # Add mandatory edges if missing
+        for u, v in self._bk.get_mandatory_edges():
+            if (u, v) not in self.leg.get_undirected_edges() and (v, u) not in self.leg.get_undirected_edges():
+                self.leg.add_undirected_edge(u, v)
+
+        # --- Step 2: enforce orientations ---
+        # Mandatory orientations
+        for u, v in self._bk.get_mandatory_orientations():
+            if (u, v) in self.leg.get_undirected_edges() or (v, u) in self.leg.get_undirected_edges():
+                self.leg.remove_undirected_edge(u, v)
+                self.leg.remove_undirected_edge(v, u)
+                self.leg.add_directed_edge(u, v)
+
+        # Forbidden orientations
+        for u, v in self._bk.get_forbidden_orientations():
+            if (u, v) in self.leg.get_undirected_edges():
+                # Orient as v -> u instead
+                self.leg.remove_undirected_edge(u, v)
+                self.leg.add_directed_edge(v, u)
+            elif (v, u) in self.leg.get_undirected_edges():
+                # Orient as u -> v instead
+                self.leg.remove_undirected_edge(v, u)
+                self.leg.add_directed_edge(u, v)
+            
 
     def _uc_rule(self):
         adj = {x: self.leg.get_adjacencies(x) for x in self._nodes}

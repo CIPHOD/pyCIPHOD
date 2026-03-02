@@ -18,10 +18,10 @@ class SCM:
         self._list_uncertain_edge_types = ['*-o', '*->', '*-']
 
     def generate_data(self):
-        # TODO
+        1 # TODO
 
     def induced_graph(self):
-        #TODO
+        1 # TODO
 
 class LinearSCM(SCM):
     def __init__(self):
