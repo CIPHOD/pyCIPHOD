@@ -237,7 +237,8 @@ class LocPC:
         # Run the algorithm incrementally with hops
         while h <= len(self._nodes):
             self.run(outcome, hop=h)
-            if self._non_orientability_criterion(self._find_subset_NOC()):
+            subset_noc = self._find_subset_NOC()
+            if self._non_orientability_criterion(subset_noc):
                 break # Stop if non-orientability criterion met
             if (outcome, treatment) in self.leg.get_directed_edges() or treatment not in self.leg.get_adjacencies(outcome):
                 identifiability_CDE = True
