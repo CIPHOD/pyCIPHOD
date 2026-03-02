@@ -52,9 +52,10 @@ class Graph:
             self.add_directed_edge(vertex_i, vertex_j)
 
     def remove_directed_edge(self, vertex_i: str, vertex_j: str) -> None:
-        # raise NotImplementedError("Please Implement this method")
-        self._directed_g.remove_edge(vertex_i, vertex_j)
-        self._g.remove_edge(vertex_i, vertex_j, key='->')
+        if self._directed_g.has_edge(vertex_i, vertex_j):
+            self._directed_g.remove_edge(vertex_i, vertex_j)
+        if self._g.has_edge(vertex_i, vertex_j, key='->'):
+            self._g.remove_edge(vertex_i, vertex_j, key='->')
 
     def add_confounded_edge(self, vertex_i: str, vertex_j: str) -> None:
         self.add_vertex(vertex_i)
@@ -68,9 +69,13 @@ class Graph:
             self.add_confounded_edge(vertex_i, vertex_j)
 
     def remove_confounded_edge(self, vertex_i: str, vertex_j: str) -> None:
-        self._confounded_g.remove_edge(vertex_i, vertex_j)
-        self._g.remove_edge(vertex_i, vertex_j, key='<->')
-        self._g.remove_edge(vertex_j, vertex_i, key='<->')
+        if self._confounded_g.has_edge(vertex_i, vertex_j):
+            self._confounded_g.remove_edge(vertex_i, vertex_j)
+        
+        if self._g.has_edge(vertex_i, vertex_j, key='<->'):
+            self._g.remove_edge(vertex_i, vertex_j, key='<->')
+        if self._g.has_edge(vertex_j, vertex_i, key='<->'):
+            self._g.remove_edge(vertex_j, vertex_i, key='<->')
 
     def add_undirected_edge(self, vertex_i: str, vertex_j: str) -> None:
         self.add_vertex(vertex_i)
@@ -84,9 +89,12 @@ class Graph:
             self.add_undirected_edge(vertex_i, vertex_j)
 
     def remove_undirected_edge(self, vertex_i: str, vertex_j: str) -> None:
-        self._undirected_g.remove_edge(vertex_i, vertex_j)
-        self._g.remove_edge(vertex_i, vertex_j, key='-')
-        self._g.remove_edge(vertex_j, vertex_i, key='-')
+        if self._undirected_g.has_edge(vertex_i, vertex_j):
+            self._undirected_g.remove_edge(vertex_i, vertex_j)
+        if self._g.has_edge(vertex_i, vertex_j, key='-'):
+            self._g.remove_edge(vertex_i, vertex_j, key='-')
+        if self._g.has_edge(vertex_j, vertex_i, key='-'):
+            self._g.remove_edge(vertex_j, vertex_i, key='-')
 
     def add_uncertain_edge(self, vertex_i: str, vertex_j: str, edge_type='*-o') -> None:
         """
@@ -103,10 +111,16 @@ class Graph:
         self._g.add_edge(vertex_i, vertex_j, key=edge_type)
 
     def remove_uncertain_edge(self, vertex_i: str, vertex_j: str) -> None:
-        self._uncertain_g.remove_edge(vertex_i, vertex_j)
-        self._uncertain_g.remove_edge(vertex_j, vertex_i)
+        if self._uncertain_g.has_edge(vertex_i, vertex_j):
+            self._uncertain_g.remove_edge(vertex_i, vertex_j)
+        if self._uncertain_g.has_edge(vertex_j, vertex_i):
+            self._uncertain_g.remove_edge(vertex_j, vertex_i)
+
         for edge_type in self._list_uncertain_edge_types:
-            self._g.remove_edge(vertex_i, vertex_j, key=edge_type)
+            if self._g.has_edge(vertex_i, vertex_j, key=edge_type):
+                self._g.remove_edge(vertex_i, vertex_j, key=edge_type)
+            if self._g.has_edge(vertex_j, vertex_i, key=edge_type):
+                self._g.remove_edge(vertex_j, vertex_i, key=edge_type)
 
     def update_uncertain_edge(self, vertex_i, vertex_j, edge_type='*-o') -> None:
         assert edge_type in self._list_uncertain_edge_types
@@ -133,8 +147,11 @@ class Graph:
     def get_confounded_edges(self):
         return set(self._confounded_g.edges)
 
-    def get_undirected_edges(self):
-        return set(self._undirected_g.edges)
+    # def get_undirected_edges(self):
+    #     return set(self._undirected_g.edges)
+    
+    def get_undirected_edges(self): # Corrected to have the symmetry
+        return set(e for edge in self._undirected_g.edges() for e in [edge, edge[::-1]])
     
     def get_uncertain_edges(self):
         return set(self._uncertain_g.edges)
@@ -155,13 +172,13 @@ class Graph:
     def get_children(self, vertex: str) -> set:
         return set(self._directed_g.successors(vertex))
 
-    def get_adjacencies(self, vertex: str) -> set:
-        parents = self.get_parents(vertex)
-        children = self.get_children(vertex)
-        adjacencies = parents.union(children)
-        return adjacencies
+    # def get_adjacencies(self, vertex: str) -> set:
+    #     parents = self.get_parents(vertex)
+    #     children = self.get_children(vertex)
+    #     adjacencies = parents.union(children)
+    #     return adjacencies
     
-    def get_all_adjacencies(self, vertex: str) -> set:
+    def get_adjacencies(self, vertex: str) -> set:
         adjacents = set()
         if vertex in self._directed_g:
             adjacents.update(self._directed_g.predecessors(vertex))
@@ -175,6 +192,29 @@ class Graph:
             adjacents.update(self._uncertain_g.successors(vertex))
         return adjacents
 
+    # def get_unshielded_triples(self):
+    #     """
+    #     Returns all unshielded triples in the graph.
+    #     An unshielded triple is a triple (X, Z, Y) where:
+    #         - X and Z are adjacent
+    #         - Y and Z are adjacent
+    #         - X and Y are NOT adjacent
+    #     """
+    #     triples = []
+    #     adj = {v: self.get_adjacencies(v) for v in self.get_vertices()}
+
+    #     for z in self.get_vertices():
+    #         neighbors = list(adj[z])
+    #         if len(neighbors) < 2:
+    #             continue
+    #         # on parcourt toutes les paires de voisins
+    #         for i in range(len(neighbors)):
+    #             x = neighbors[i]
+    #             for j in range(i + 1, len(neighbors)):
+    #                 y = neighbors[j]
+    #                 if y not in adj[x]: 
+    #                     triples.append((x, z, y))
+    #     return triples
 
 
     def get_ancestors(self, vertex: str) -> set:
