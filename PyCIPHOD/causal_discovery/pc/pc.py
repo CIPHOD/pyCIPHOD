@@ -29,7 +29,7 @@ class PC:
         self._twd = twd # Test wise deletion
         self._nodes = list(data.columns)
         self.cpdag = CompletedPartiallyDirectedAcyclicGraph()
-
+        
         self.nb_ci_tests = 0
         self.sepset = dict()
 

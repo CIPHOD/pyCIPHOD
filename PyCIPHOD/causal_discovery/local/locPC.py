@@ -7,7 +7,7 @@ from utils.background_knowledge.background_knowledge import BackgroundKnowledge
 
 
 class LocPC:
-    def __init__(self, data: pd.DataFrame, sparsity: float = 0.05, ci_test: CiTests = FisherZ, background_knowledge: BackgroundKnowledge = None, twd = False):
+    def __init__(self, data: pd.DataFrame, sparsity: float = 0.05, ci_test: CiTests = FisherZ, background_knowledge = BackgroundKnowledge(), twd = False):
         self._data = data
         self._sparsity = sparsity
         self._ci_test = ci_test
@@ -16,9 +16,11 @@ class LocPC:
         self._twd = twd
         self._nodes = list(data.columns)
         
+        bk_nd = background_knowledge.get_non_descendants()
+        self._non_descendants = {node: bk_nd.get(node, set()) for node in self._nodes}
+        
         self.nb_ci_tests = 0
         self.sepset = dict()
-        self.non_descendants = background_knowledge.get_non_descendants()
     
     def _update_skeleton(self, D_set):
         for d in D_set: 
@@ -34,7 +36,7 @@ class LocPC:
                 self._visited.add(d)
                 if len(adj[d]) - 1 >= s:
                     repeat = True
-                    for b in [x for x in adj[d] if x not in (self._visited & self.non_descendants[d])]:
+                    for b in [x for x in adj[d] if x not in (self._visited & self._non_descendants[d])]:
                         for S in combinations([a for a in adj[d] if a != b], s):
                             if (d,b,S) in self._knowntests:
                                 p_val = self._knowntests[(d,b,S)]
