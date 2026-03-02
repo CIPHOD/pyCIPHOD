@@ -182,6 +182,7 @@ class LocPC:
         self._nnc_rule()
         
     def run(self, target, hop: int = 0):
+        target = [target]
         self.leg = LocalEssentialGraph()
         self.leg.add_vertices(self._nodes)
         self._visited = set()
@@ -236,11 +237,8 @@ class LocPC:
         
         # Run the algorithm incrementally with hops
         while h <= len(self._nodes):
-            print(h)
             self.run(outcome, hop=h)
             subset_noc = self._find_subset_NOC()
-            print(subset_noc)
-            print(self._non_orientability_criterion(subset_noc))
             if self._non_orientability_criterion(subset_noc):
                 break # Stop if non-orientability criterion met
             if (outcome, treatment) in self.leg.get_directed_edges() or treatment not in self.leg.get_adjacencies(outcome):

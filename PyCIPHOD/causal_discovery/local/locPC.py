@@ -182,6 +182,7 @@ class LocPC:
         self._nnc_rule()
         
     def run(self, target, hop: int = 0):
+        target = [target]
         self.leg = LocalEssentialGraph()
         self.leg.add_vertices(self._nodes)
         self._visited = set()

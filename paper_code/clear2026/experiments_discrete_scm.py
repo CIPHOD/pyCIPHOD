@@ -6,6 +6,7 @@ import os
 import sys
 import random
 from pathlib import Path
+from scipy.special import expit
 
 import numpy as np
 import pandas as pd
@@ -188,14 +189,14 @@ def run_experiments(dag_generator,
         ci_counts = {m:[] for m in methods}
 
         for i in range(n_experiments):
-
+            print(f"--- Experiment {i+1}/{n_experiments} ---")
             g,y,x = dag_generator(size, edge_prob)
             data = simulate_binarySCM_from_dag(g, n_samples)
             true_parents = list(g.predecessors(y))
             exp_id = f"{size}_{i}"
 
             for method in methods:
-
+                print(f"Running method : {method}")
                 res = {
                     'locpc': locpc_CDE,
                     'ldecc': ldecc_CDE,
@@ -239,55 +240,53 @@ def run_experiments(dag_generator,
 
 
 # =========================================
-# Run Experiments
+# Run Experiments 
 # =========================================
 if __name__ == "__main__":
-
     N_SAMPLES = 5000
     N_EXP = 100
     M = 2
 
-    os.makedirs("output_experiments_binary", exist_ok=True)
+    output_dir = root / "output_experiments_binary"
+    os.makedirs(output_dir, exist_ok=True)
 
-    # Small DAGs
-    small_sizes = [10,20,30,40,50]
-    methods_small = ['locpc','ldecc','pc','CMB','MBbyMB']
+    # ----------------------------
+    # Small DAGs (< 100 nodes)
+    # ----------------------------
+    small_sizes = [10, 20, 30, 40, 50]
+    methods_small = ['locpc', 'ldecc', 'pc', 'CMB', 'MBbyMB']  # all baselines
 
-    # Identifiable
-    ID_sum_small, ID_det_small = run_experiments(
-        random_DAG_identifiable_CDE,
-        methods_small,
-        small_sizes,
-        N_EXP, M, N_SAMPLES,
-        count_non_identifiable=False
+    # Identifiable DAGs
+    ID_summary_small, ID_detailed_small = run_experiments(
+        random_DAG_identifiable_CDE, methods_small, small_sizes, N_EXP, M, N_SAMPLES, count_non_identifiable=False
     )
+    ID_summary_small.to_csv(output_dir / "summary_identifiable_small.csv", index=False)
+    ID_detailed_small.to_csv(output_dir / "final_results_identifiable_small.csv", index=False)
 
-    ID_sum_small.to_csv("output_experiments_binary/summary_identifiable_small.csv", index=False)
-    ID_det_small.to_csv("output_experiments_binary/final_results_identifiable_small.csv", index=False)
-
-    # Non-identifiable
-    NONID_sum_small, NONID_det_small = run_experiments(
-        random_DAG_nonidentifiable_CDE,
-        methods_small,
-        small_sizes,
-        N_EXP, M, N_SAMPLES,
-        count_non_identifiable=True
+    # Non-identifiable DAGs
+    NONID_summary_small, NONID_detailed_small = run_experiments(
+        random_DAG_nonidentifiable_CDE, methods_small, small_sizes, N_EXP, M, N_SAMPLES, count_non_identifiable=True
     )
+    NONID_summary_small.to_csv(output_dir / "summary_nonidentifiable_small.csv", index=False)
+    NONID_detailed_small.to_csv(output_dir / "final_results_nonidentifiable_small.csv", index=False)
 
-    NONID_sum_small.to_csv("output_experiments_binary/summary_nonidentifiable_small.csv", index=False)
-    NONID_det_small.to_csv("output_experiments_binary/final_results_nonidentifiable_small.csv", index=False)
+    # ----------------------------
+    # Large DAGs (>= 100 nodes)
+    # ----------------------------
+    large_sizes = [100, 150, 200]
+    methods_large = ['locpc', 'ldecc', 'CMB', 'MBbyMB']  # PC excluded
 
-    # Large DAGs
-    large_sizes = [100]
-    methods_large = ['locpc','ldecc','CMB','MBbyMB']
-
-    ID_sum_large, ID_det_large = run_experiments(
-        random_DAG_identifiable_CDE,
-        methods_large,
-        large_sizes,
-        N_EXP, M, N_SAMPLES,
-        count_non_identifiable=False
+    # Identifiable DAGs
+    ID_summary_large, ID_detailed_large = run_experiments(
+        random_DAG_identifiable_CDE, methods_large, large_sizes, N_EXP, M, N_SAMPLES, count_non_identifiable=False
     )
+    ID_summary_large.to_csv(output_dir / "summary_identifiable_large.csv", index=False)
+    ID_detailed_large.to_csv(output_dir / "final_results_identifiable_large.csv", index=False)
 
-    ID_sum_large.to_csv("output_experiments_binary/summary_identifiable_large.csv", index=False)
-    ID_det_large.to_csv("output_experiments_binary/final_results_identifiable_large.csv", index=False)
+    # Non-identifiable DAGs
+    NONID_summary_large, NONID_detailed_large = run_experiments(
+        random_DAG_nonidentifiable_CDE, methods_large, large_sizes, N_EXP, M, N_SAMPLES, count_non_identifiable=True
+    )
+    NONID_summary_large.to_csv(output_dir / "summary_nonidentifiable_large.csv", index=False)
+    NONID_detailed_large.to_csv(output_dir / "final_results_nonidentifiable_large.csv", index=False)
+# %%

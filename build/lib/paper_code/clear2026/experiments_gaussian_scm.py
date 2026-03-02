@@ -179,7 +179,8 @@ if __name__ == "__main__":
     N_EXP = 100
     M = 2
 
-    os.makedirs("output_experiments_gaussian", exist_ok=True)
+    output_dir = root / "output_experiments_gaussian"
+    os.makedirs(output_dir, exist_ok=True)
 
     # ----------------------------
     # Small DAGs (< 100 nodes)
@@ -191,15 +192,15 @@ if __name__ == "__main__":
     ID_summary_small, ID_detailed_small = run_experiments(
         random_DAG_identifiable_CDE, methods_small, small_sizes, N_EXP, M, N_SAMPLES, count_non_identifiable=False
     )
-    ID_summary_small.to_csv("output_experiments_gaussian/summary_identifiable_small.csv", index=False)
-    ID_detailed_small.to_csv("output_experiments_gaussian/final_results_identifiable_small.csv", index=False)
+    ID_summary_small.to_csv(output_dir / "summary_identifiable_small.csv", index=False)
+    ID_detailed_small.to_csv(output_dir / "final_results_identifiable_small.csv", index=False)
 
     # Non-identifiable DAGs
     NONID_summary_small, NONID_detailed_small = run_experiments(
         random_DAG_nonidentifiable_CDE, methods_small, small_sizes, N_EXP, M, N_SAMPLES, count_non_identifiable=True
     )
-    NONID_summary_small.to_csv("output_experiments_gaussian/summary_nonidentifiable_small.csv", index=False)
-    NONID_detailed_small.to_csv("output_experiments_gaussian/final_results_nonidentifiable_small.csv", index=False)
+    NONID_summary_small.to_csv(output_dir / "summary_nonidentifiable_small.csv", index=False)
+    NONID_detailed_small.to_csv(output_dir / "final_results_nonidentifiable_small.csv", index=False)
 
     # ----------------------------
     # Large DAGs (>= 100 nodes)
@@ -211,12 +212,13 @@ if __name__ == "__main__":
     ID_summary_large, ID_detailed_large = run_experiments(
         random_DAG_identifiable_CDE, methods_large, large_sizes, N_EXP, M, N_SAMPLES, count_non_identifiable=False
     )
-    ID_summary_large.to_csv("output_experiments_gaussian/summary_identifiable_large.csv", index=False)
-    ID_detailed_large.to_csv("output_experiments_gaussian/final_results_identifiable_large.csv", index=False)
+    ID_summary_large.to_csv(output_dir / "summary_identifiable_large.csv", index=False)
+    ID_detailed_large.to_csv(output_dir / "final_results_identifiable_large.csv", index=False)
 
     # Non-identifiable DAGs
     NONID_summary_large, NONID_detailed_large = run_experiments(
         random_DAG_nonidentifiable_CDE, methods_large, large_sizes, N_EXP, M, N_SAMPLES, count_non_identifiable=True
     )
-    NONID_summary_large.to_csv("output_experiments_gaussian/summary_nonidentifiable_large.csv", index=False)
-    NONID_detailed_large.to_csv("output_experiments_gaussian/final_results_nonidentifiable_large.csv", index=False)
+    NONID_summary_large.to_csv(output_dir / "summary_nonidentifiable_large.csv", index=False)
+    NONID_detailed_large.to_csv(output_dir / "final_results_nonidentifiable_large.csv", index=False)
+# %%

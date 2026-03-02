@@ -41,6 +41,7 @@ paper_code/clear2026/__init__.py
 paper_code/clear2026/dags_generator.py
 paper_code/clear2026/experiments_discrete_scm.py
 paper_code/clear2026/experiments_gaussian_scm.py
+paper_code/clear2026/test.py
 paper_code/clear2026/baselines/__init__.py
 paper_code/clear2026/baselines/Gupta_codes/__init__.py
 paper_code/clear2026/baselines/Gupta_codes/causal_discovery_base.py
