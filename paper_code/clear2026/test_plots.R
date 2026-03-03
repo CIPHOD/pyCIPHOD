@@ -27,7 +27,7 @@ parse_py_list <- function(s) s %>% str_remove_all("\\[|\\]|'") %>% str_split(",\
 # ==========================
 # 3. Load Gaussian small (identifiable only)
 # ==========================
-res_ident_gauss <- read_csv("~/output_experiments_gaussian/final_results_identifiable_small.csv")
+res_ident_gauss <- read_csv("output_experiments_gaussian/final_results_identifiable_small.csv")
 
 # ==========================
 # 4. Compute F1
@@ -96,7 +96,14 @@ plot_metric <- function(df,y_col,y_label,log_y=FALSE,title="") {
     scale_shape_manual(values=sorbonne_shapes) +
     labs(x="DAG size",y=y_label,title=title,color="Method",fill="Method",shape="Method") +
     theme_bw() + theme(legend.position="bottom")
-  if(!log_y) p <- p + ylim(0,if(y_col=="mean_val") 100 else 1)
+  
+  # mise à l'échelle correcte
+  if(y_label=="TPR (%)") {
+    p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0,1))
+  } else if(y_label=="F1 Score") {
+    p <- p + ylim(0,1)
+  }
+  
   if(log_y) p <- p + scale_y_log10()
   p
 }

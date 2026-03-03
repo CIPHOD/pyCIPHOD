@@ -203,7 +203,7 @@ class LocPC:
     def _find_subset_NOC(self):
         # Add assert if no target to run the algorithm before
         subset = set(self._target)
-        queue = [self._target]
+        queue = self._target
         while queue:
             current = queue.pop(0)
             neighbors = set(self.leg.get_adjacencies(current)) & self._visited
@@ -215,6 +215,7 @@ class LocPC:
                         queue.append(neighbor)
         return set(subset)
     
+        
     def _non_orientability_criterion(self, subset):
         for d in subset: 
             set_condition_2 = []
@@ -230,13 +231,13 @@ class LocPC:
         return True   
     
     
-    
     def run_locPC_CDE(self, treatment: str, outcome: str) -> dict:
         h = 0
         identifiability_CDE = False
         
         # Run the algorithm incrementally with hops
         while h <= len(self._nodes):
+            print(h)
             self.run(outcome, hop=h)
             subset_noc = self._find_subset_NOC()
             if self._non_orientability_criterion(subset_noc):

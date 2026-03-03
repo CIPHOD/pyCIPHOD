@@ -11,7 +11,11 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 
+import random
 
+SEED = 2026
+random.seed(SEED)
+np.random.seed(SEED)
 
 # Add paths for DAG generators and baselines
 root = Path(__file__).resolve().parent
@@ -48,16 +52,18 @@ def simulate_linearSCM_from_dag(dag, nb_obs=1, coef_range=(-1,1), sigma_range=(0
     return pd.DataFrame(coef, index=nodes, columns=nodes), pd.DataFrame(data, columns=nodes)
 
 # %%
-n = 30
+n = 20
 m = 2
-g, y, x = random_DAG_identifiable_CDE(n, m/(n+1))
+g, y, x = random_DAG_nonidentifiable_CDE(n, m/(n+1))
 
 _, data = simulate_linearSCM_from_dag(g, 5000)
 # %%
 locpc = LocPC(data)
 # %%
-locpc.run(str(y), 0)
+locpc.run(y, 2)
 locpc.leg.draw_graph({y})
 # %%
-x, y
+locpc = LocPC(data)
+locpc.run_locPC_CDE(x,y)
 # %%
+

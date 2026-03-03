@@ -1,0 +1,13 @@
+dag_size,method,identifiable_proportion,avg_nb_CI_tests
+100,locpc,0.27,5271.8
+100,ldecc,0.19,9505.68
+100,CMB,0.0,16560.03
+100,MBbyMB,0.0,12857.25
+150,locpc,0.14,7309.19
+150,ldecc,0.27,22234.15
+150,CMB,0.0,45462.4
+150,MBbyMB,0.0,27565.05
+200,locpc,0.17,14394.69
+200,ldecc,0.22,34776.16
+200,CMB,0.0,79525.02
+200,MBbyMB,0.0,63650.62

@@ -4,14 +4,16 @@
 # =========================================
 import os
 import sys
-import random
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import networkx as nx
 
-np.random.seed(2025)
+import random
+
+SEED = 2025
+random.seed(SEED)
 
 # Add paths for DAG generators and baselines
 root = Path(__file__).resolve().parent
@@ -26,7 +28,6 @@ from paper_code.clear2026.dags_generator import (
     random_DAG_nonidentifiable_CDE
 )
 from baselines.Gupta_codes.ldecc import LDECCAlgorithm
-from baselines.Gupta_codes.pc_alg import PCAlgorithm
 from baselines.pyCausalFS.LSL.MBs.CMB.CMB import CMB
 from baselines.pyCausalFS.LSL.MBs.MBbyMB import MBbyMB
 from PyCIPHOD.causal_discovery.pc.pc import PC

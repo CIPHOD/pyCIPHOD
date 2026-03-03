@@ -50,32 +50,32 @@ parse_py_list <- function(s) {
 # ==========================
 # 3. Load data
 # ==========================
-load_results <- function(path_small, path_big) {
+load_results <- function(path_small, path_large) {
   small <- read_csv(path_small)
-  big   <- read_csv(path_big)
+  big   <- read_csv(path_large)
   bind_rows(small, big)
 }
 
 # Gaussian
 res_identifiable_gauss <- load_results(
   "output_experiments_gaussian/final_results_identifiable_small.csv",
-  "output_experiments_gaussian/final_results_identifiable_big.csv"
+  "output_experiments_gaussian/final_results_identifiable_large.csv"
 )
 
 res_non_identifiable_gauss <- load_results(
-  "output_experiments_gaussian/final_results_non_identifiable_small.csv",
-  "output_experiments_gaussian/final_results_non_identifiable_big.csv"
+  "output_experiments_gaussian/final_results_nonidentifiable_small.csv",
+  "output_experiments_gaussian/final_results_nonidentifiable_large.csv"
 )
 
 # Binary
 res_identifiable_bin <- load_results(
   "output_experiments_binary/final_results_identifiable_small.csv",
-  "output_experiments_binary/final_results_identifiable_big.csv"
+  "output_experiments_binary/final_results_identifiable_small.csv"
 )
 
 res_non_identifiable_bin <- load_results(
-  "output_experiments_binary/final_results_non_identifiable_small.csv",
-  "output_experiments_binary/final_results_non_identifiable_big.csv"
+  "output_experiments_binary/final_results_nonidentifiable_small.csv",
+  "output_experiments_binary/final_results_nonidentifiable_small.csv"
 )
 
 # ==========================
@@ -92,10 +92,6 @@ compute_f1 <- function(df) {
 
 res_identifiable_gauss <- compute_f1(res_identifiable_gauss)
 res_identifiable_bin   <- compute_f1(res_identifiable_bin)
-
-# Invert identifiability for non-identifiable
-res_non_identifiable_gauss$identifiability <- FALSE
-res_non_identifiable_bin$identifiability   <- FALSE
 
 # ==========================
 # 5. Plotting parameters
@@ -145,17 +141,19 @@ summarise_metric <- function(df, value_col, ident_label, log_y = FALSE) {
 
 # Convenience wrappers
 summarise_prop <- function(df, label) summarise_metric(df, "identifiability", label)
-summarise_time <- function(df, label) summarise_metric(df, "exec_time", label)
 summarise_ci   <- function(df, label) summarise_metric(df, "nb_CI_tests", label, log_y = TRUE)
 summarise_f1   <- function(df, label) summarise_metric(df, "f1_score", label)
-
+summarise_prop_nonid <- function(df, label) {
+  df %>%
+    mutate(non_identifiable = !identifiability) %>%
+    summarise_metric("non_identifiable", label)
+}
 # ==========================
 # 7. Summarise results
 # ==========================
 # Gaussian
 prop_id_gauss <- summarise_prop(res_identifiable_gauss, "Identifiable")
-prop_nonid_gauss <- summarise_prop(res_non_identifiable_gauss, "Non-identifiable")
-time_id_gauss <- summarise_time(res_identifiable_gauss, "Identifiable")
+prop_nonid_gauss <- summarise_prop_nonid(res_non_identifiable_gauss, "Non-identifiable")
 ci_id_gauss <- summarise_ci(res_identifiable_gauss, "Identifiable")
 ci_nonid_gauss <- summarise_ci(res_non_identifiable_gauss, "Non-identifiable")
 f1_id_gauss <- summarise_f1(res_identifiable_gauss, "Identifiable")
@@ -163,7 +161,6 @@ f1_id_gauss <- summarise_f1(res_identifiable_gauss, "Identifiable")
 # Binary
 prop_id_bin <- summarise_prop(res_identifiable_bin, "Identifiable")
 prop_nonid_bin <- summarise_prop(res_non_identifiable_bin, "Non-identifiable")
-time_id_bin <- summarise_time(res_identifiable_bin, "Identifiable")
 ci_id_bin <- summarise_ci(res_identifiable_bin, "Identifiable")
 ci_nonid_bin <- summarise_ci(res_non_identifiable_bin, "Non-identifiable")
 f1_id_bin <- summarise_f1(res_identifiable_bin, "Identifiable")
@@ -171,24 +168,52 @@ f1_id_bin <- summarise_f1(res_identifiable_bin, "Identifiable")
 # ==========================
 # 8. Plotting helpers
 # ==========================
-plot_metric <- function(df, y_col, y_label, log_y = FALSE, title_text = "") {
-  p <- ggplot(df, aes(x = as.factor(dag_size), y = !!sym(y_col), color = method, group = method, shape = method)) +
-    geom_ribbon(aes(ymin = lower, ymax = upper, fill = method), alpha = 0.2, color = NA) +
+plot_metric <- function(df,y_col,y_label,log_y=FALSE,title="") {
+  p <- ggplot(df,
+              aes(x = as.factor(dag_size),
+                  y = !!sym(y_col),
+                  color = method,
+                  group = method,
+                  shape = method)) +
+    geom_ribbon(aes(ymin = lower, ymax = upper, fill = method),
+                alpha = 0.2, color = NA) +
     geom_line(size = 1) +
     geom_point(size = 3) +
     scale_color_manual(values = sorbonne_colors) +
     scale_fill_manual(values = sorbonne_colors) +
     scale_shape_manual(values = sorbonne_shapes) +
-    labs(x = "DAG size", y = y_label, title = title_text, color = "Method", fill = "Method", shape = "Method") +
+    labs(x = "DAG size",
+         y = y_label,
+         title = title,
+         color = "Method",
+         fill = "Method",
+         shape = "Method") +
     theme_bw() +
-    theme(legend.position = "bottom")
+    theme(
+      legend.position = "bottom",
+      axis.text.x = element_text(angle = 45, hjust = 1)
+    )
   
-  if(!log_y) p <- p + ylim(0, if(y_col=="mean_f1") 1 else 100)
+  if(y_label=="TPR (%)") {
+    p <- p + scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                                limits = c(0,1))
+  } else if(y_label=="F1 Score") {
+    p <- p + ylim(0,1)
+  }
+  
   if(log_y) p <- p + scale_y_log10()
-  
-  return(p)
+  p
 }
 
+p_nonid <- 
+  (plot_metric(ci_nonid_gauss, "mean_val", "# CI tests", log_y=TRUE, 
+               "Gaussian - Non-identifiable") |
+     plot_metric(prop_nonid_gauss, "mean_val", "Prop non-identifiable")) /
+  (plot_metric(ci_nonid_bin, "mean_val", "# CI tests", log_y=TRUE, 
+               "Binary - Non-identifiable") |
+     plot_metric(prop_nonid_bin, "mean_val", "Prop non-identifiable")) +
+  plot_layout(guides = "collect") &
+  theme(legend.position = "bottom")
 # ==========================
 # 9. Combine plots
 # ==========================
@@ -212,3 +237,6 @@ p_gauss <- (plot_metric(ci_id_gauss, "mean_val", "# CI tests", log_y=TRUE, "LINE
 # 10. Save figure
 # ==========================
 ggsave("identifiable_exp.png", p_gauss, width = 6, height = 6, dpi = 800)
+
+ggsave("non_identifiable_exp.png", p_nonid,
+       width = 6, height = 6, dpi = 800)
