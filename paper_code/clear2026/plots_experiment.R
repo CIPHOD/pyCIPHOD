@@ -160,7 +160,7 @@ f1_id_gauss <- summarise_f1(res_identifiable_gauss, "Identifiable")
 
 # Binary
 prop_id_bin <- summarise_prop(res_identifiable_bin, "Identifiable")
-prop_nonid_bin <- summarise_prop(res_non_identifiable_bin, "Non-identifiable")
+prop_nonid_bin <- summarise_prop_nonid(res_non_identifiable_bin, "Non-identifiable")
 ci_id_bin <- summarise_ci(res_identifiable_bin, "Identifiable")
 ci_nonid_bin <- summarise_ci(res_non_identifiable_bin, "Non-identifiable")
 f1_id_bin <- summarise_f1(res_identifiable_bin, "Identifiable")

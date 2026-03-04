@@ -237,7 +237,6 @@ class LocPC:
         
         # Run the algorithm incrementally with hops
         while h <= len(self._nodes):
-            print(h)
             self.run(outcome, hop=h)
             subset_noc = self._find_subset_NOC()
             if self._non_orientability_criterion(subset_noc):

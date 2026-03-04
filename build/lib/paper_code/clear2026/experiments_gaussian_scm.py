@@ -14,6 +14,7 @@ import random
 
 SEED = 2025
 random.seed(SEED)
+np.random.seed(SEED)
 
 # Add paths for DAG generators and baselines
 root = Path(__file__).resolve().parent
