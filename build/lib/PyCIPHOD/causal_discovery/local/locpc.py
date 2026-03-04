@@ -16,6 +16,8 @@ class LocPC:
         self._twd = twd
         self._nodes = list(data.columns)
         
+        self.performed_tests = set()
+        
         bk_nd = background_knowledge.get_non_descendants()
         self._non_descendants = {node: bk_nd.get(node, set()) for node in self._nodes}
         
@@ -42,6 +44,7 @@ class LocPC:
                                 p_val = self._knowntests[(d,b,S)]
                             else:
                                 test = self._ci_test(d,b,list(S))
+                                self.performed_tests.add((d,b,S))
                                 self.nb_ci_tests += 1
                                 if self._twd:
                                     data_test = self._data.dropna(subset=[d, b] + list(S))

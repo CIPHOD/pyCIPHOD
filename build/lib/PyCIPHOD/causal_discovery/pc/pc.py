@@ -28,6 +28,8 @@ class PC:
         self._bk = background_knowledge
         self._twd = twd # Test wise deletion
         self._nodes = list(data.columns)
+        self.performed_tests = set()
+        
         self.cpdag = CompletedPartiallyDirectedAcyclicGraph()
         
         self.nb_ci_tests = 0
@@ -51,6 +53,7 @@ class PC:
                     for y in adj[x]:
                         for S in combinations([a for a in adj[x] if a != y], s):
                             test = self._ci_test(x, y, list(S))
+                            self.performed_tests.add((x,y,S))
                             self.nb_ci_tests += 1
                             if self._twd:
                                 data_test = self._data.dropna(subset=[x, y] + list(S))
