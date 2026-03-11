@@ -70,12 +70,12 @@ res_non_identifiable_gauss <- load_results(
 # Binary
 res_identifiable_bin <- load_results(
   "output_experiments_binary/final_results_identifiable_small.csv",
-  "output_experiments_binary/final_results_identifiable_small.csv"
+  "output_experiments_binary/final_results_identifiable_large.csv"
 )
 
 res_non_identifiable_bin <- load_results(
   "output_experiments_binary/final_results_nonidentifiable_small.csv",
-  "output_experiments_binary/final_results_nonidentifiable_small.csv"
+  "output_experiments_binary/final_results_nonidentifiable_large.csv"
 )
 
 # ==========================
@@ -177,8 +177,8 @@ plot_metric <- function(df,y_col,y_label,log_y=FALSE,title="") {
                   shape = method)) +
     geom_ribbon(aes(ymin = lower, ymax = upper, fill = method),
                 alpha = 0.2, color = NA) +
-    geom_line(size = 1) +
-    geom_point(size = 3) +
+    geom_line(size = .75, alpha = 0.8) +
+    geom_point(size = 2, alpha = 0.8) +
     scale_color_manual(values = sorbonne_colors) +
     scale_fill_manual(values = sorbonne_colors) +
     scale_shape_manual(values = sorbonne_shapes) +
@@ -208,10 +208,10 @@ plot_metric <- function(df,y_col,y_label,log_y=FALSE,title="") {
 p_nonid <- 
   (plot_metric(ci_nonid_gauss, "mean_val", "# CI tests", log_y=TRUE, 
                "Gaussian - Non-identifiable") |
-     plot_metric(prop_nonid_gauss, "mean_val", "Prop non-identifiable")) /
+     plot_metric(prop_nonid_gauss, "mean_val", "TPR (%)")) /
   (plot_metric(ci_nonid_bin, "mean_val", "# CI tests", log_y=TRUE, 
                "Binary - Non-identifiable") |
-     plot_metric(prop_nonid_bin, "mean_val", "Prop non-identifiable")) +
+     plot_metric(prop_nonid_bin, "mean_val", "TPR (%)")) +
   plot_layout(guides = "collect") &
   theme(legend.position = "bottom")
 # ==========================
@@ -236,7 +236,7 @@ p_gauss <- (plot_metric(ci_id_gauss, "mean_val", "# CI tests", log_y=TRUE, "LINE
 # ==========================
 # 10. Save figure
 # ==========================
-ggsave("identifiable_exp.png", p_gauss, width = 6, height = 6, dpi = 800)
+ggsave("figures/identifiable_exp.png", p_gauss, width = 6, height = 6, dpi = 800)
 
-ggsave("non_identifiable_exp.png", p_nonid,
+ggsave("figures/non_identifiable_exp.png", p_nonid,
        width = 6, height = 6, dpi = 800)

@@ -8,6 +8,11 @@ import networkx as nx
 
 import random
 
+SEED = 2025
+random.seed(SEED)
+np.random.seed(SEED)
+
+
 from experiments_gaussian_scm import PC_CDE, ldecc_CDE, MBbyMB_CDE, CMB_CDE, locpc_CDE
 
 root = Path(__file__).resolve().parent
@@ -18,7 +23,7 @@ sys.path.extend([
 
 
 # Charger le CSV
-df = pd.read_csv('SNDS_agreg.csv', sep=';')
+df = pd.read_csv('paper_code/clear2026/SNDS_agreg.csv', sep=';')
 
 # Filtrer sexe = 9
 df_sexe9 = df[df['sexe'] == 9]

@@ -208,7 +208,7 @@ if __name__ == "__main__":
     # Large DAGs (>= 100 nodes)
     # ----------------------------
     large_sizes = [100, 150, 200]
-    methods_large = ['locpc', 'ldecc', 'CMB', 'MBbyMB']  # PC excluded
+    methods_large = ['locpc', 'ldecc', 'pc', 'CMB', 'MBbyMB']  # PC included
 
     # Identifiable DAGs
     ID_summary_large, ID_detailed_large = run_experiments(
