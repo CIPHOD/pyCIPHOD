@@ -59,5 +59,23 @@ class BackgroundKnowledge:
             if not self._non_descendants[node]:
                 del self._non_descendants[node]
 
+    # -------------------- Getters --------------------
+    def get_mandatory_edges(self):
+        """Return a copy of all mandatory edges (undirected)."""
+        return self._mandatory_edges.copy()
+
+    def get_forbidden_edges(self):
+        """Return a copy of all forbidden edges (undirected)."""
+        return self._forbidden_edges.copy()
+
+    def get_mandatory_orientations(self):
+        """Return a copy of all mandatory orientations (u -> v)."""
+        return self._mandatory_orientations.copy()
+
+    def get_forbidden_orientations(self):
+        """Return a copy of all forbidden orientations (u -> v)."""
+        return self._forbidden_orientations.copy()
+
     def get_non_descendants(self):
+        """Return a copy of the non-descendant constraints {node: set(non_descendants)}."""
         return {k: v.copy() for k, v in self._non_descendants.items()}
