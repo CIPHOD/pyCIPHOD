@@ -205,15 +205,7 @@ plot_metric <- function(df,y_col,y_label,log_y=FALSE,title="") {
   p
 }
 
-p_nonid <- 
-  (plot_metric(ci_nonid_gauss, "mean_val", "# CI tests", log_y=TRUE, 
-               "Gaussian - Non-identifiable") |
-     plot_metric(prop_nonid_gauss, "mean_val", "TPR (%)")) /
-  (plot_metric(ci_nonid_bin, "mean_val", "# CI tests", log_y=TRUE, 
-               "Binary - Non-identifiable") |
-     plot_metric(prop_nonid_bin, "mean_val", "TPR (%)")) +
-  plot_layout(guides = "collect") &
-  theme(legend.position = "bottom")
+
 # ==========================
 # 9. Combine plots
 # ==========================
@@ -231,6 +223,16 @@ p_gauss <- (plot_metric(ci_id_gauss, "mean_val", "# CI tests", log_y=TRUE, "LINE
      plot_metric(prop_id_bin, "mean_val", "TPR (%)") |
      plot_metric(f1_id_bin, "mean_val", "F1 Score")) +
   plot_layout(heights = c(1,0.02,1), guides = "collect") &
+  theme(legend.position = "bottom")
+
+p_nonid <- 
+  (plot_metric(ci_nonid_gauss, "mean_val", "# CI tests", log_y=TRUE, 
+               "Gaussian - Non-identifiable") |
+     plot_metric(prop_nonid_gauss, "mean_val", "TPR (%)")) 
+  (plot_metric(ci_nonid_bin, "mean_val", "# CI tests", log_y=TRUE, 
+               "Binary - Non-identifiable") |
+     plot_metric(prop_nonid_bin, "mean_val", "TPR (%)")) +
+  plot_layout(guides = "collect") &
   theme(legend.position = "bottom")
 
 # ==========================

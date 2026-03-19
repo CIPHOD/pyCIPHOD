@@ -1,73 +1,73 @@
 import os
 import sys
 from pathlib import Path
+import random
 
 import numpy as np
 import pandas as pd
 import networkx as nx
+from pprint import pprint
 
-import random
-
+# Reproducibility
 SEED = 2025
 random.seed(SEED)
 np.random.seed(SEED)
 
-
-from experiments_gaussian_scm import PC_CDE, ldecc_CDE, MBbyMB_CDE, CMB_CDE, locpc_CDE
-
+# Add project paths
 root = Path(__file__).resolve().parent
 sys.path.extend([
     str(root),
     str(root.parents[1] / "PyCIPHOD")
 ])
 
+# Import CDE methods
+from experiments_gaussian_scm import PC_CDE, ldecc_CDE, MBbyMB_CDE, CMB_CDE, locpc_CDE
 
-# Charger le CSV
+# Load dataset
 df = pd.read_csv('paper_code/clear2026/SNDS_agreg.csv', sep=';')
 
-# Filtrer sexe = 9
-df_sexe9 = df[df['sexe'] == 9]
+# Filter out sex = 9
+df_filtered = df[df['sexe'] == 9]
 
-# Pivot table
-data = df_sexe9.pivot_table(
+# Pivot to get departments vs. pathologies
+data = df_filtered.pivot_table(
     index='dept',
     columns='patho_niv1',
     values='prev',
     fill_value=0
 ).reset_index()
 
-# Mettre toutes les colonnes sauf 'dept' au format numérique
-data = data.drop(columns=["dept",
-                          'Pas de pathologie repérée, traitement, maternité, hospitalisation ou traitement antalgique ou anti-inflammatoire'])
+# Drop non-pathology column and 'dept'
+drop_cols = ["dept",
+             'Pas de pathologie repérée, traitement, maternité, hospitalisation ou traitement antalgique ou anti-inflammatoire']
+data = data.drop(columns=drop_cols)
+
+# Convert to numeric
 data = data.apply(pd.to_numeric, errors='coerce')
 
-# Vérifier
-print(data.head())
-print("\nTypes des colonnes :")
+# Dataset overview
+print("Dataset shape:", data.shape)
+print("\nColumn types:")
 print(data.dtypes)
+print("\nBasic statistics:")
+print(data.describe())
 
+# Optional transformation
+data_arcsin = np.arcsin(np.sqrt(data / 100))
 
-data_arcsin = np.arcsin(np.sqrt(data/100))
-
-# %%
+# Define target and predictor
 x = 'Insuffisance rénale chronique terminale'
 y = 'Diabète'
 
-locpc_res = locpc_CDE(data, x, y)
-pc_res = PC_CDE(data, x, y)
-ldecc_res = ldecc_CDE(data, x, y)
-cmb_res = CMB_CDE(data, x, y)
-mbbymb_res = MBbyMB_CDE(data, x, y)
-# %%
-from pprint import pprint
-
+# Run CDE methods
 results = {
-    "LocPC": locpc_res,
-    "PC": pc_res,
-    "LDECC": ldecc_res,
-    "CMB": cmb_res,
-    "MBbyMB": mbbymb_res,
+    "LocPC": locpc_CDE(data, x, y),
+    "PC": PC_CDE(data, x, y),
+    "LDECC": ldecc_CDE(data, x, y),
+    "CMB": CMB_CDE(data, x, y),
+    "MBbyMB": MBbyMB_CDE(data, x, y),
 }
 
+# Display results
+print("\nCDE estimation results:")
 pprint(results)
-

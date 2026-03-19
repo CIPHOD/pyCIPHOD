@@ -142,83 +142,75 @@ def neighborhood(g: nx.DiGraph, target: str):
 # =========================================================
 # Heatmap Plotting
 # =========================================================
-def plot_pc_vs_locpc_heatmaps(pc_obj, locpc_list, target, graph):
-
+def plot_pc_vs_locpc_heatmaps(pc_obj, locpc_list, target, graph, save_path = None):
     neighborhood = compute_neighborhood(graph, target)
     nodes = list(graph.nodes)
 
+    # Tri des noeuds selon la distance au target
     sorted_nodes = sorted(
         nodes,
         key=lambda x: neighborhood.get(x, max(neighborhood.values()) + 1)
     )
-
     n = len(sorted_nodes)
     node_to_idx = {node: i for i, node in enumerate(sorted_nodes)}
 
-    grids = []
     objects = [pc_obj] + locpc_list
 
-    def build_triangular_grid(test_list):
+    # Construire une grille complète (pas triangulaire)
+    def build_grid(test_list):
         grid = np.zeros((n, n))
         for i, j, _ in test_list:
             xi = node_to_idx[i]
             yi = node_to_idx[j]
-            a, b = sorted([xi, yi])
-            grid[a, b] += 1
+            grid[yi, xi] += 1
         return grid
 
-    for obj in objects:
-        grids.append(build_triangular_grid(obj.performed_tests))
+    grids = [build_grid(obj.performed_tests) for obj in objects]
 
+    # Valeur max globale pour uniformiser les couleurs
     global_max = max(grid.max() for grid in grids)
     vmax = global_max if global_max > 0 else 1
 
-    mask = np.tril(np.ones((n, n), dtype=bool), k=-1)
-
-    fig, axes = plt.subplots(1, 4, figsize=(12, 3))
+    fig, axes = plt.subplots(1, 4, figsize=(14, 5))
     titles = ["PC", "LocPC hop=1", "LocPC hop=2", "LocPC hop=3"]
 
     for ax, grid, title, obj in zip(axes.flat, grids, titles, objects):
-
-        masked_grid = np.ma.array(grid, mask=mask)
-        ax.imshow(masked_grid, cmap="Reds", vmin=0, vmax=vmax)
+        im = ax.imshow(grid, cmap="Reds", vmin=0, vmax=vmax)
         ax.invert_yaxis()
-        ax.set_title(title)
-        ax.set_xticks([])
-        ax.set_yticks([])
+        ax.set_xticks(range(n))
+        ax.set_yticks(range(n))
+        ax.set_xticklabels(sorted_nodes, rotation=90, fontsize=8)
+        ax.set_yticklabels(sorted_nodes, fontsize=8)
+        ax.set_xlabel("Node i")
+        ax.set_ylabel("Node j")
+        ax.set_title(title, fontsize = 20)
+        ax.invert_yaxis()
 
         ax.text(
-            0.02, 0.98,
+            0, -0.2,
             f"Total # of tests: {obj.nb_ci_tests}",
             transform=ax.transAxes,
             ha="left",
             va="top",
-            fontsize=9,
+            fontsize=16,
             bbox=dict(facecolor="white", alpha=0.8, edgecolor="none")
         )
-
-        if hasattr(obj, "_visited") and obj._visited:
-            for node in obj._visited:
-                if node in node_to_idx:
-                    idx = node_to_idx[node]
-                    ax.add_patch(
-                        plt.Rectangle(
-                            (idx - 0.5, idx - 0.5),
-                            1, 1,
-                            facecolor="blue",
-                            alpha=0.6
-                        )
-                    )
-
+    
     plt.tight_layout()
+    if save_path is not None:
+        fig.savefig(save_path, dpi=300)   # ← sauvegarde PNG ou PDF
     plt.show()
+
 
 
 # =========================================================
 # Animation
 # =========================================================
 def animate_pc_vs_locpc_hops(pc_obj, locpc_objs, target, g,
-                             interval=100, decay=0.8):
+                             interval=100, decay=0.5, save_path=None):
+    import matplotlib.pyplot as plt
+    import matplotlib.animation as animation
+    import numpy as np
 
     neighborhood_dict = neighborhood(g, target)
     all_nodes = list(g.nodes)
@@ -236,16 +228,26 @@ def animate_pc_vs_locpc_hops(pc_obj, locpc_objs, target, g,
     fig, axes = plt.subplots(1, 4, figsize=(18,5))
     ims = []
     grids = [np.zeros((n,n)) for _ in range(4)]
-
+    
     names = ["PC"] + [f"LocPC hop={h}" for h in [1,2,3]]
+    counters_text = []
 
     for ax, name in zip(axes, names):
         im = ax.imshow(np.zeros((n,n)), cmap='Reds', vmin=0, vmax=1)
-        ax.set_xticks([])
-        ax.set_yticks([])
+        ax.set_xticks(range(n))
+        ax.set_yticks(range(n))
+        ax.set_xticklabels(sorted_nodes, rotation=90, fontsize=8)
+        ax.set_yticklabels(sorted_nodes, fontsize=8)
+        ax.set_xlabel("Node i")
+        ax.set_ylabel("Node j")
         ax.set_title(name)
         ax.invert_yaxis()
         ims.append(im)
+        
+        # Texte compteur en dessous de l'axe x
+        txt = ax.text(0.8, 0.92, "Tests: 0", transform=ax.transAxes,
+                      ha="center", fontsize=10, color='blue')
+        counters_text.append(txt)
 
     pc_tests = [(node_to_idx[i], node_to_idx[j])
                 for (i,j,_) in pc_obj.performed_tests]
@@ -267,16 +269,18 @@ def animate_pc_vs_locpc_hops(pc_obj, locpc_objs, target, g,
         if frame < len(pc_tests):
             x, y = pc_tests[frame]
             grids[0][y, x] = 1
+            counters_text[0].set_text(f"Tests: {frame+1}")
 
         for k, loc_tests in enumerate(locpc_tests_list):
             if frame < len(loc_tests):
                 x, y = loc_tests[frame]
                 grids[k+1][y, x] = 1
+                counters_text[k+1].set_text(f"Tests: {frame+1}")
 
         for im_idx, im in enumerate(ims):
             im.set_data(grids[im_idx])
 
-        return ims
+        return ims + counters_text
 
     ani = animation.FuncAnimation(
         fig, update,
@@ -285,6 +289,9 @@ def animate_pc_vs_locpc_hops(pc_obj, locpc_objs, target, g,
         blit=True,
         repeat=False
     )
+    
+    if save_path is not None:
+        ani.save(save_path, writer='pillow', fps=10)  # ← sauvegarde GIF
 
     plt.show()
 
@@ -297,8 +304,8 @@ def main():
     # ---------------------------------
     # Generate identifiable DAG
     # ---------------------------------
-    n = 40
-    m = 2
+    n = 25
+    m = 4
     g, y, x = random_DAG_identifiable_CDE(n, m/(n+1))
 
     # ---------------------------------
@@ -328,19 +335,22 @@ def main():
         pc,
         locpc_list,
         target=y,
-        graph=g
+        graph=g,
+        save_path="paper_code/clear2026/figures/heatmap.png"
     )
 
     # ---------------------------------
     # Animation
     # ---------------------------------
-    animate_pc_vs_locpc_hops(
-        pc,
-        locpc_list,
-        target=y,
-        g=g,
-        interval=1
-    )
+    # animate_pc_vs_locpc_hops(
+    #     pc,
+    #     locpc_list,
+    #     target=y,
+    #     g=g,
+    #     interval=100, 
+    #     decay = 0.8,
+    #     save_path="paper_code/clear2026/figures/anim.gif"
+    # )
 
 
 # =========================================================
