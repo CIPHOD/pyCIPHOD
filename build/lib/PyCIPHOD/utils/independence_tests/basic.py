@@ -111,10 +111,11 @@ class Gsq(CiTests):
 
     def get_dependence(self, df):
         """
-        Returns the G² statistic.
+        Returns the G² statistic safely without runtime warnings.
         """
         tables = self._contingency_table(df)
         g2_stat = 0
+
         for table in tables.values():
             if table.size == 0:
                 continue
@@ -122,9 +123,14 @@ class Gsq(CiTests):
             row_sums = np.sum(table, axis=1)
             col_sums = np.sum(table, axis=0)
             expected = np.outer(row_sums, col_sums) / n
+
             # Only consider nonzero expected counts
             mask = expected > 0
-            g2_stat += 2 * np.sum(table[mask] * np.log(table[mask] / expected[mask]))
+            with np.errstate(divide='ignore', invalid='ignore'):
+                contrib = 2 * table[mask] * np.log(table[mask] / expected[mask])
+                contrib = np.nan_to_num(contrib)  # convert nan/inf to 0
+            g2_stat += np.sum(contrib)
+
         return g2_stat
 
     def get_pvalue(self, df):

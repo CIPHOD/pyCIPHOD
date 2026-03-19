@@ -38,7 +38,7 @@ class LocPC:
                 self._visited.add(d)
                 if len(adj[d]) - 1 >= s:
                     repeat = True
-                    for b in [x for x in adj[d] if not (x in self.visited and d in self._non_descendants[x])]:
+                    for b in [x for x in adj[d] if not (x in self._visited and d in self._non_descendants[x])]:
                         for S in combinations([a for a in adj[d] if a != b], s):
                             if (d,b,S) in self._knowntests:
                                 p_val = self._knowntests[(d,b,S)]
