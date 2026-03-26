@@ -36,12 +36,12 @@ class BackgroundKnowledge:
 
     # -------------------- Non-descendant constraints --------------------
     def add_non_descendant(self, node, non_descendant):
-        if non_descendant not in self._non_descendants:
-            self._non_descendants[non_descendant] = set()
-        self._non_descendants[non_descendant].add(node)
+        if node not in self._non_descendants:
+            self._non_descendants[node] = set()
+        self._non_descendants[node].add(non_descendant)
 
         # Automatically forbid orientation non_descendant <- node
-        self.add_forbidden_orientation(node, non_descendant)
+        self.add_forbidden_orientation(non_descendant, node)
 
     def add_non_descendants_from(self, node, nodes):
         if node not in self._non_descendants:
@@ -50,7 +50,7 @@ class BackgroundKnowledge:
 
         # Automatically forbid orientation for each non-descendant
         for nd in nodes:
-            self.add_forbidden_orientation(node, nd)
+            self.add_forbidden_orientation(nd, node)
 
     def remove_non_descendant(self, node, non_descendant):
         if node in self._non_descendants:

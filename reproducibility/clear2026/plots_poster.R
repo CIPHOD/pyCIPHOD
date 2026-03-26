@@ -39,7 +39,6 @@ f1 <- function(lhat, ltrue) {
   2 * p * r / (p + r)
 }
 
-# Helper: parse Python-style list strings
 parse_py_list <- function(s) {
   s %>%
     str_remove_all("\\[|\\]|'") %>%
@@ -56,7 +55,6 @@ load_results <- function(path_small, path_large) {
   bind_rows(small, big)
 }
 
-# Gaussian
 res_identifiable_gauss <- load_results(
   "output_experiments_gaussian/final_results_identifiable_small.csv",
   "output_experiments_gaussian/final_results_identifiable_large.csv"
@@ -65,17 +63,6 @@ res_identifiable_gauss <- load_results(
 res_non_identifiable_gauss <- load_results(
   "output_experiments_gaussian/final_results_nonidentifiable_small.csv",
   "output_experiments_gaussian/final_results_nonidentifiable_large.csv"
-)
-
-# Binary
-res_identifiable_bin <- load_results(
-  "output_experiments_binary/final_results_identifiable_small.csv",
-  "output_experiments_binary/final_results_identifiable_large.csv"
-)
-
-res_non_identifiable_bin <- load_results(
-  "output_experiments_binary/final_results_nonidentifiable_small.csv",
-  "output_experiments_binary/final_results_nonidentifiable_large.csv"
 )
 
 # ==========================
@@ -91,25 +78,27 @@ compute_f1 <- function(df) {
 }
 
 res_identifiable_gauss <- compute_f1(res_identifiable_gauss)
-res_identifiable_bin   <- compute_f1(res_identifiable_bin)
+res_non_identifiable_gauss <- compute_f1(res_non_identifiable_gauss)
 
 # ==========================
 # 5. Plotting parameters
 # ==========================
 sorbonne_colors <- c(
-  "LocPC-CDE" = rgb(234, 67, 40, maxColorValue = 255),
-  "LDECC"     = rgb(3, 40, 89, maxColorValue = 255),
-  "PC"        = rgb(100, 190, 230, maxColorValue = 255),
-  "CMB"       = rgb(50, 150, 50, maxColorValue = 255),
-  "MBbyMB"    = rgb(180, 120, 200, maxColorValue = 255)
+  "PC"        = rgb(3, 40, 89, maxColorValue = 255),   # sorbonneblue
+  "LocPC-CDE" = rgb(234, 67, 40, maxColorValue = 255)  # sorbonneorange
 )
 
 sorbonne_shapes <- c(
-  "LocPC-CDE" = 17, "PC" = 15, "LDECC" = 16,
-  "CMB" = 18, "MBbyMB" = 8
+  "LocPC-CDE" = 17, "PC" = 15
 )
 
-method_levels <- c("PC", "CMB", "MBbyMB", "LDECC", "LocPC-CDE")
+method_levels <- c("PC", "LocPC-CDE")
+
+sorbonne_shapes <- c(
+  "LocPC-CDE" = 17, "PC" = 15
+)
+
+method_levels <- c("PC", "LocPC-CDE")
 
 # ==========================
 # 6. Summarisation helpers
@@ -120,12 +109,10 @@ summarise_metric <- function(df, value_col, ident_label, log_y = FALSE) {
       dag_size,
       method = recode(method,
                       "locpc" = "LocPC-CDE",
-                      "pc" = "PC",
-                      "ldecc" = "LDECC",
-                      "cmb" = "CMB",
-                      "MBbyMB" = "MBbyMB"),
+                      "pc" = "PC"),
       value = !!sym(value_col)
     ) %>%
+    filter(method %in% c("PC", "LocPC-CDE")) %>%
     group_by(dag_size, method) %>%
     summarise(
       n = n(),
@@ -135,11 +122,9 @@ summarise_metric <- function(df, value_col, ident_label, log_y = FALSE) {
       upper = mean_val + 1.96*se,
       .groups = "drop"
     ) %>%
-    mutate(method = factor(method, levels = method_levels), type = ident_label,
-           mean_val = if(log_y) mean_val else mean_val)
+    mutate(method = factor(method, levels = method_levels), type = ident_label)
 }
 
-# Convenience wrappers
 summarise_prop <- function(df, label) summarise_metric(df, "identifiability", label)
 summarise_ci   <- function(df, label) summarise_metric(df, "nb_CI_tests", label, log_y = TRUE)
 summarise_f1   <- function(df, label) summarise_metric(df, "f1_score", label)
@@ -148,25 +133,18 @@ summarise_prop_nonid <- function(df, label) {
     mutate(non_identifiable = !identifiability) %>%
     summarise_metric("non_identifiable", label)
 }
+
 # ==========================
 # 7. Summarise results
 # ==========================
-# Gaussian
 prop_id_gauss <- summarise_prop(res_identifiable_gauss, "Identifiable")
 prop_nonid_gauss <- summarise_prop_nonid(res_non_identifiable_gauss, "Non-identifiable")
 ci_id_gauss <- summarise_ci(res_identifiable_gauss, "Identifiable")
 ci_nonid_gauss <- summarise_ci(res_non_identifiable_gauss, "Non-identifiable")
 f1_id_gauss <- summarise_f1(res_identifiable_gauss, "Identifiable")
 
-# Binary
-prop_id_bin <- summarise_prop(res_identifiable_bin, "Identifiable")
-prop_nonid_bin <- summarise_prop_nonid(res_non_identifiable_bin, "Non-identifiable")
-ci_id_bin <- summarise_ci(res_identifiable_bin, "Identifiable")
-ci_nonid_bin <- summarise_ci(res_non_identifiable_bin, "Non-identifiable")
-f1_id_bin <- summarise_f1(res_identifiable_bin, "Identifiable")
-
 # ==========================
-# 8. Plotting helpers
+# 8. Plotting helper
 # ==========================
 plot_metric <- function(df,y_col,y_label,log_y=FALSE,title="") {
   p <- ggplot(df,
@@ -205,39 +183,22 @@ plot_metric <- function(df,y_col,y_label,log_y=FALSE,title="") {
   p
 }
 
-
 # ==========================
-# 9. Combine plots
+# 9. Single combined plot for Gaussian SCM (all metrics)
 # ==========================
-horizontal_separator <- ggplot() +
-  geom_hline(yintercept = 0, color = "grey40", size = 0.5, linetype = "dashed") +
-  theme_void() +
-  theme(plot.margin = margin(0,0,0,0), panel.background = element_rect(fill="white", color=NA))
-
-# Gaussian plots
-p_gauss <- (plot_metric(ci_id_gauss, "mean_val", "# CI tests", log_y=TRUE, "Gaussian SCM") |
-              plot_metric(prop_id_gauss, "mean_val", "TPR (%)") |
-              plot_metric(f1_id_gauss, "mean_val", "F1 Score")) /
-  (plot_metric(ci_id_bin, "mean_val", "# CI tests", log_y=TRUE, "Binary SCM") |
-     plot_metric(prop_id_bin, "mean_val", "TPR (%)") |
-     plot_metric(f1_id_bin, "mean_val", "F1 Score")) +
-  plot_layout(guides = "collect") &
-  theme(legend.position = "bottom")
-
-p_nonid <- 
-  (plot_metric(ci_nonid_gauss, "mean_val", "# CI tests", log_y=TRUE, 
-               "Gaussian SCM") |
-     plot_metric(prop_nonid_gauss, "mean_val", "TPR (%)")) /
-  (plot_metric(ci_nonid_bin, "mean_val", "# CI tests", log_y=TRUE, 
-               "Binary SCM") |
-     plot_metric(prop_nonid_bin, "mean_val", "TPR (%)")) +
+p_gauss <- (
+  plot_metric(ci_id_gauss, "mean_val", "# CI tests", log_y=TRUE, title = "Identifiable") |
+    plot_metric(prop_id_gauss, "mean_val", "TPR (%)") |
+    plot_metric(f1_id_gauss, "mean_val", "F1 Score")
+) /
+  (
+    plot_metric(ci_nonid_gauss, "mean_val", "# CI tests", log_y=TRUE, title = "Non-identifiable") |
+      plot_metric(prop_nonid_gauss, "mean_val", "TPR (%)")
+  ) +
   plot_layout(guides = "collect") &
   theme(legend.position = "bottom")
 
 # ==========================
 # 10. Save figure
 # ==========================
-ggsave("figures/identifiable_exp.png", p_gauss, width = 6, height = 6, dpi = 800)
-
-ggsave("figures/non_identifiable_exp.png", p_nonid,
-       width = 6, height = 6, dpi = 800)
+ggsave("figures/gaussian_identifiable_vs_nonidentifiable_all_metrics.png", p_gauss, width = 8, height = 6, dpi = 800)

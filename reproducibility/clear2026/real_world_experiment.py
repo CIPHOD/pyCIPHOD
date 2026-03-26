@@ -24,7 +24,7 @@ sys.path.extend([
 from experiments_gaussian_scm import PC_CDE, ldecc_CDE, MBbyMB_CDE, CMB_CDE, locpc_CDE
 
 # Load dataset
-df = pd.read_csv('reproducibility/clear2026/SNDS_agreg.csv', sep=';')
+df = pd.read_csv('paper_code/clear2026/SNDS_agreg.csv', sep=';')
 
 # Filter out sex = 9
 df_filtered = df[df['sexe'] == 9]

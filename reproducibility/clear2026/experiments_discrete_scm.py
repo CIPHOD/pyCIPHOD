@@ -25,16 +25,16 @@ sys.path.extend([
 ])
 
 # Specific imports
-from reproducibility.clear2026.dags_generator import (
+from paper_code.clear2026.dags_generator import (
     random_DAG_identifiable_CDE,
     random_DAG_nonidentifiable_CDE
 )
 from baselines.Gupta_codes.ldecc import LDECCAlgorithm
 from baselines.pyCausalFS.LSL.MBs.CMB.CMB import CMB
 from baselines.pyCausalFS.LSL.MBs.MBbyMB import MBbyMB
-from src.PyCIPHOD.causal_discovery.pc.pc import PC
-from src.PyCIPHOD import LocPC
-from src.PyCIPHOD.utils.independence_tests.basic import Gsq
+from PyCIPHOD.causal_discovery.pc.pc import PC
+from PyCIPHOD.causal_discovery.local.locpc import LocPC
+from PyCIPHOD.utils.independence_tests.basic import Gsq
 
 # =========================================
 # Binary SCM Simulation (Logistic)

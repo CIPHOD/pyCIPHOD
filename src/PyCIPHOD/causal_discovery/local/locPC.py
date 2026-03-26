@@ -7,7 +7,7 @@ from utils.background_knowledge.background_knowledge import BackgroundKnowledge
 
 
 class LocPC:
-    def __init__(self, data: pd.DataFrame, sparsity: float = 0.05, ci_test: CiTests = FisherZ, background_knowledge = BackgroundKnowledge(), twd = False):
+    def __init__(self, data: pd.DataFrame, sparsity: float = 0.05, ci_test: CiTests = FisherZ, background_knowledge = BackgroundKnowledge(), twd = False): 
         self._data = data
         self._sparsity = sparsity
         self._ci_test = ci_test
@@ -15,6 +15,7 @@ class LocPC:
         self._knowntests = {}
         self._twd = twd
         self._nodes = list(data.columns)
+        self.neighborhood_h = set()
         
         self.performed_tests = set()
         
@@ -55,14 +56,15 @@ class LocPC:
                                 self.sepset[(d, b)] = self.sepset[(b, d)] = S
                                 break
             s += 1
+            
+        # D_new = {
+        #         n
+        #         for d in D_set
+        #         for n in self.leg.get_adjacencies(d)
+        #         if n not in self._non_descendants[d]
+        #     }
         
-        D_new = {
-            n
-            for d in D_set
-            for n in self.leg.get_adjacencies(d)
-        }
-
-        return D_new - self._visited
+    
     
     def _apply_background_knowledge(self):
         """
@@ -110,31 +112,33 @@ class LocPC:
         for x in self._nodes:
             for y in adj[x]:
                 for z in adj[y]:
-                    if z == x or z in adj[x] or any(node not in self._visited for node in (x, y, z)):
+                    if (y,x) in self.leg.get_directed_edges() or (y, z) in self.leg.get_directed_edges(): 
+                        continue 
+                    if z == x or z in adj[x] or any(node not in self.neighborhood_h for node in (x, y, z)):
                         continue
                     if y not in self.sepset.get((x, z), []):
                         self.leg.remove_undirected_edge(x, y)
                         self.leg.remove_undirected_edge(y, z)
                         self.leg.add_directed_edges_from([(x, y), (z, y)])
-                        
+
     
     def _meek_rules(self):
         changed = False
         adj = {x: self.leg.get_adjacencies(x) for x in self._nodes}
         
         for x in self._visited:
-            for y in set(adj[x]) & self._visited:
+            for y in set(adj[x]):
                 # Rule 1:
-                for z in (set(adj[y]) - set(adj[x])) & self._visited:
-                    if any(node not in self._visited for node in (x, y, z)):
+                for z in (set(adj[y]) - set(adj[x])):
+                    if any(node not in self.neighborhood_h for node in (x, y, z)):
                         continue
                     if (x,y) in self.leg.get_directed_edges() and (y,z) in self.leg.get_undirected_edges():
                         changed = True
                         self.leg.remove_undirected_edge(z, y)
                         self.leg.add_directed_edge(y, z)
                 # Rule 2:
-                for z in set(adj[y]) & set(adj[x]) & self._visited:
-                    if any(node not in self._visited for node in (x, y, z)):
+                for z in set(adj[y]) & set(adj[x]):
+                    if any(node not in self.neighborhood_h for node in (x, y, z)):
                         continue
                     if (x,y) in self.leg.get_directed_edges() and (y,z) in self.leg.get_directed_edges() and (x,z) in self.leg.get_undirected_edges():
                         changed = True
@@ -143,14 +147,14 @@ class LocPC:
         
         # Rule 3: 
         for x in self._visited:
-            for y in set(adj[x]) & self._visited:
+            for y in set(adj[x]):
                 if (x, y) not in self.leg.get_directed_edges():
                     continue
-                for z in (set(adj[y]) - set(adj[x])) & self._visited:
+                for z in (set(adj[y]) - set(adj[x])):
                     if (z, y) not in self.leg.get_directed_edges():
                         continue
-                    for w in set(adj[x]) & set(adj[y]) & set(adj[z]) & self._visited:
-                        if any(node not in self._visited for node in (x, y, z, w)):
+                    for w in set(adj[x]) & set(adj[y]) & set(adj[z]):
+                        if any(node not in self.neighborhood_h for node in (x, y, z, w)):
                             continue
                         undirected_triplet = [(w, y), (w, x), (z, w)]
                         if all(edge in self.leg.get_undirected_edges() for edge in undirected_triplet):
@@ -192,11 +196,30 @@ class LocPC:
         self._target = target
         k = 0
         D_set = set(self._target)
+        new_neighbors = set(self._target)
         while k <= hop:
-            D_new = self._update_skeleton(D_set)
+            self.neighborhood_h.update(new_neighbors)
+            self._update_skeleton(D_set)
             if self._visited == set(self._nodes):
                 break
-            D_set = D_new
+            
+            D_new = set()
+            D_new = {
+                n
+                for d in D_set
+                for n in self.leg.get_adjacencies(d)
+                if n not in self._non_descendants[d]
+            }
+            
+            new_neighbors = set()
+            for d in D_set:
+                for n in self.leg.get_adjacencies(d):
+                    if n in self._non_descendants[d]:
+                        new_neighbors.add(n)
+                    if n in self._visited:
+                        self.neighborhood_h.add(d)
+                                 
+            D_set = D_new 
             k+=1
         self._apply_background_knowledge()
         self._orientation()

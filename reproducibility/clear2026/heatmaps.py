@@ -14,6 +14,8 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+
 
 # =========================================================
 # Reproducibility
@@ -36,12 +38,13 @@ sys.path.extend([
 # =========================================================
 # External Imports
 # =========================================================
-from reproducibility.clear2026.dags_generator import (
-    random_DAG_identifiable_CDE
+from paper_code.clear2026.dags_generator import (
+    random_DAG_identifiable_CDE,
+    random_DAG_nonidentifiable_CDE
 )
 
-from src.PyCIPHOD.causal_discovery.pc.pc import PC
-from src.PyCIPHOD import LocPC
+from PyCIPHOD.causal_discovery.pc.pc import PC
+from PyCIPHOD.causal_discovery.local.locpc import LocPC
 
 
 # =========================================================
@@ -333,7 +336,7 @@ def main():
         locpc_list,
         target=y,
         graph=g,
-        save_path="reproducibility/clear2026/figures/heatmap.png"
+        save_path="paper_code/clear2026/figures/heatmap.png"
     )
 
     # ---------------------------------
@@ -346,7 +349,7 @@ def main():
     #     g=g,
     #     interval=100, 
     #     decay = 0.8,
-    #     save_path="reproducibility/clear2026/figures/anim.gif"
+    #     save_path="paper_code/clear2026/figures/anim.gif"
     # )
 
 
