@@ -1,4 +1,12 @@
-# <span style="color:#F7B617">Py</span><span style="color:#c82804">CIPHOD</span> - <span style="color:#4851a1">Python package for Causal Inference in Public Health using Observational Databases</span>
+# <span style="color:#F7B617">Py</span><span style="color:#c82804">CIPHOD</span> - <span style="color:#4851a1">Python package for Causal Inference in Public Health using Observational Databases</span> (Beta)
+
+
+## ⚠️ Status
+- Beta version (v0.1)
+- This package is under active development: not all functionalities are available
+- Disclaimer: This package is under development and may change. Use with caution applications.
+
+
 
 ## Introduction
 
@@ -6,27 +14,26 @@ PyCIPHOD is a robust and versatile Python package developed and maintained by th
 
 
 
+
 ## Key features
 
-### Temporal data
+### Data type
 * iid data
 * Time series
 * Cohorts
 
 ### Temporal graphs
 * Fully specified graphs
-* Partially specified graphs, mainly summary causal graphs
+* Partially specified graphs: partially oriented graphs, cluster graphs, summary causal graphs, difference graphs
 
 
 ### Causal discovery
-* Collaborative causal discovery: Integrate and synthesize causal knowledge from multiple datasets to enhance the robustness of your findings.
-
 * Local causal discovery: Focus on discovering causal relations in a specific part of the causal graph, particularly around a target variable (such as a treatment or outcome), rather than attempting to learn the entire causal structure of the dataset. This approach is computationally more efficient because it limits the scope to the local neighborhood of the target variable.
 
 * Federated causal discovery: Harness the power of distributed data sources while preserving data privacy.
 
-### Causal representation
-* TODO
+* Collaborative causal discovery: Integrate and synthesize causal knowledge from multiple datasets to enhance the robustness of your findings.
+
 
 ### Causal reasoning and estimation
 * Determine whether a causal effect can be uniquely computed from the available data and the structure of the causal graph.

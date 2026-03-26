@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyCIPHOD"
+version = "0.1.0"
+description = "A Python package for causal discovery, causal inference, and root cause analysis"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+  {name = "Charles Assaad", email = "charles.assaad@inserm.fr"},
+    {name = "Federico Baldo"},
+    {name = "Simon Ferreira"},
+    {name = "Timothée Loranchet"}
+]
+dependencies = [
+    "networkx>0",
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "matplotlib",
+    "seaborn"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
