@@ -2,9 +2,7 @@
 # =========================================
 # Imports and General Setup
 # =========================================
-import os
 import sys
-import random
 from pathlib import Path
 
 import numpy as np
@@ -25,16 +23,10 @@ sys.path.extend([
 ])
 
 # Specific imports
-from paper_code.clear2026.dags_generator import (
-    random_DAG_identifiable_CDE,
+from reproducibility.clear2026.dags_generator import (
     random_DAG_nonidentifiable_CDE
 )
-from baselines.Gupta_codes.ldecc import LDECCAlgorithm
-from baselines.Gupta_codes.pc_alg import PCAlgorithm
-from baselines.pyCausalFS.LSL.MBs.CMB.CMB import CMB
-from baselines.pyCausalFS.LSL.MBs.MBbyMB import MBbyMB
-from PyCIPHOD.causal_discovery.pc.pc import PC
-from PyCIPHOD.causal_discovery.local.locpc import LocPC
+from src.PyCIPHOD import LocPC
 
 def simulate_linearSCM_from_dag(dag, nb_obs=1, coef_range=(-1,1), sigma_range=(0.5,1)):
     """Simulate linear SCM data from a DAG with random coefficients."""

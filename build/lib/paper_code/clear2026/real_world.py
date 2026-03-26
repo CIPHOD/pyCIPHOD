@@ -23,7 +23,7 @@ sys.path.extend([
 
 
 # Charger le CSV
-df = pd.read_csv('paper_code/clear2026/SNDS_agreg.csv', sep=';')
+df = pd.read_csv('reproducibility/clear2026/SNDS_agreg.csv', sep=';')
 
 # Filtrer sexe = 9
 df_sexe9 = df[df['sexe'] == 9]
