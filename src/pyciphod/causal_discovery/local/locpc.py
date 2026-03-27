@@ -1,17 +1,18 @@
+from pyciphod.utils.graphs.partially_specified_graphs import LocalEssentialGraph
+from pyciphod.utils.independence_tests.basic import CiTests, FisherZ
+from pyciphod.utils.background_knowledge.background_knowledge import BackgroundKnowledge
 import pandas as pd
 from itertools import combinations
+from typing import Type, Optional
 
-from utils.graphs.partially_specified_graphs import LocalEssentialGraph
-from utils.independence_tests.basic import CiTests, FisherZ
-from utils.background_knowledge.background_knowledge import BackgroundKnowledge
 
 
 class LocPC:
-    def __init__(self, data: pd.DataFrame, sparsity: float = 0.05, ci_test: CiTests = FisherZ, background_knowledge = BackgroundKnowledge(), twd = False): 
+    def __init__(self, data: pd.DataFrame, sparsity: float = 0.05, ci_test: Type[CiTests] = FisherZ, background_knowledge: Optional[BackgroundKnowledge] = None, twd: bool = False):
         self._data = data
         self._sparsity = sparsity
         self._ci_test = ci_test
-        self._bk = background_knowledge
+        self._bk = background_knowledge if background_knowledge is not None else BackgroundKnowledge()
         self._knowntests = {}
         self._twd = twd
         self._nodes = list(data.columns)
@@ -19,7 +20,7 @@ class LocPC:
         
         self.performed_tests = set()
         
-        bk_nd = background_knowledge.get_non_descendants()
+        bk_nd = self._bk.get_non_descendants()
         self._non_descendants = {node: bk_nd.get(node, set()) for node in self._nodes}
         
         self.nb_ci_tests = 0

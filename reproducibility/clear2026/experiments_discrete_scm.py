@@ -1,9 +1,7 @@
-#%%
 # =========================================
 # Imports and General Setup
 # =========================================
 import os
-import sys
 from pathlib import Path
 from scipy.special import expit
 
@@ -17,24 +15,41 @@ SEED = 2025
 random.seed(SEED)
 np.random.seed(SEED)
 
-# Add paths for DAG generators and baselines
+# root (used for output path) — keep this file runnable as a script
 root = Path(__file__).resolve().parent
-sys.path.extend([
-    str(root),
-    str(root.parents[1] / "PyCIPHOD")
-])
+
 
 # Specific imports
-from paper_code.clear2026.dags_generator import (
-    random_DAG_identifiable_CDE,
-    random_DAG_nonidentifiable_CDE
-)
-from baselines.Gupta_codes.ldecc import LDECCAlgorithm
-from baselines.pyCausalFS.LSL.MBs.CMB.CMB import CMB
-from baselines.pyCausalFS.LSL.MBs.MBbyMB import MBbyMB
-from PyCIPHOD.causal_discovery.pc.pc import PC
-from PyCIPHOD.causal_discovery.local.locpc import LocPC
-from PyCIPHOD.utils.independence_tests.basic import Gsq
+from pyciphod.causal_discovery.pc.pc import PC
+from pyciphod.causal_discovery.local.locpc import LocPC
+from pyciphod.utils.independence_tests.basic import Gsq
+
+# Optional dependencies (pyciphod internals + baselines).
+# Do not raise on import; instead set a flag and raise with instruction only when trying to run the script.
+REPRO_AVAILABLE = True
+REPRO_ERROR = None
+try:
+    from reproducibility.clear2026.dags_generator import random_DAG_identifiable_CDE, random_DAG_nonidentifiable_CDE
+    from reproducibility.clear2026.baselines.Gupta_codes.ldecc import LDECCAlgorithm
+    from reproducibility.clear2026.baselines.pyCausalFS.LSL.MBs.CMB.CMB import CMB
+    from reproducibility.clear2026.baselines.pyCausalFS.LSL.MBs.MBbyMB import MBbyMB
+except Exception as e:
+    REPRO_AVAILABLE = False
+    REPRO_ERROR = e
+
+
+def require_repro():
+    """Call this from __main__ to ensure optional reproducibility deps are available.
+    Raises ImportError with an actionable message if not available.
+    """
+    if not REPRO_AVAILABLE:
+        raise ImportError(
+            "Missing optional dependencies for reproducibility scripts.\n"
+            "Install the optional extras to run these scripts: `pip install -e .[reproducibility]` (dev) or\n"
+            "`pip install pyCIPHOD[reproducibility]` (release).\n"
+            f"Original import error: {REPRO_ERROR}"
+        )
+
 
 # =========================================
 # Binary SCM Simulation (Logistic)
@@ -252,11 +267,21 @@ if __name__ == "__main__":
     output_dir = root / "output_experiments_binary"
     os.makedirs(output_dir, exist_ok=True)
 
+    # Decide which methods to run depending on optional reproducibility dependencies
+    if not REPRO_AVAILABLE:
+        # Do not raise: run only core package methods so the script remains usable without extras
+        print("Optional reproducibility dependencies are missing. Running only core pyciphod methods (no baselines).")
+        methods_small = ['locpc', 'pc']
+        methods_large = ['locpc', 'pc']
+    else:
+        # All dependencies available: run baselines as well
+        methods_small = ['locpc', 'ldecc', 'pc', 'CMB', 'MBbyMB']  # all baselines
+        methods_large = ['locpc', 'ldecc', 'pc', 'CMB', 'MBbyMB']  # PC excluded (kept for parity with original list)
+
     # ----------------------------
     # Small DAGs (< 100 nodes)
     # ----------------------------
     small_sizes = [10, 20, 30, 40, 50]
-    methods_small = ['locpc', 'ldecc', 'pc', 'CMB', 'MBbyMB']  # all baselines
 
     # Identifiable DAGs
     ID_summary_small, ID_detailed_small = run_experiments(
@@ -276,7 +301,6 @@ if __name__ == "__main__":
     # Large DAGs (>= 100 nodes)
     # ----------------------------
     large_sizes = [100, 150, 200]
-    methods_large = ['locpc', 'ldecc', 'pc', 'CMB', 'MBbyMB']  # PC excluded
 
     # Identifiable DAGs
     ID_summary_large, ID_detailed_large = run_experiments(

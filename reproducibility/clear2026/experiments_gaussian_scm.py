@@ -20,7 +20,7 @@ np.random.seed(SEED)
 root = Path(__file__).resolve().parent
 sys.path.extend([
     str(root),
-    str(root.parents[1] / "PyCIPHOD")
+    str(root.parents[1] / "pyciphod")
 ])
 
 # Specific imports
@@ -31,8 +31,8 @@ from paper_code.clear2026.dags_generator import (
 from baselines.Gupta_codes.ldecc import LDECCAlgorithm
 from baselines.pyCausalFS.LSL.MBs.CMB.CMB import CMB
 from baselines.pyCausalFS.LSL.MBs.MBbyMB import MBbyMB
-from PyCIPHOD.causal_discovery.pc.pc import PC
-from PyCIPHOD.causal_discovery.local.locpc import LocPC
+from pyciphod.causal_discovery.pc.pc import PC
+from pyciphod.causal_discovery.local.locpc import LocPC
 
 # =========================================
 # Utility Functions

@@ -17,7 +17,7 @@ np.random.seed(SEED)
 root = Path(__file__).resolve().parent
 sys.path.extend([
     str(root),
-    str(root.parents[1] / "PyCIPHOD")
+    str(root.parents[1] / "pyciphod")
 ])
 
 # Import CDE methods

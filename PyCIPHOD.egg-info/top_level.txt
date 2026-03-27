@@ -1,3 +1,6 @@
 PyCIPHOD
-paper_code
+build
+examples
+reproducibility
+src
 tests

@@ -1,7 +1,4 @@
-from utils.graphs.graphs import Graph
-from utils.graphs.graphs import DirectedMixedGraph
-from utils.graphs.graphs import AcyclicDirectedMixedGraph
-from utils.graphs.graphs import FullySpecifiedGraph
+from pyciphod.utils.graphs.graphs import Graph, DirectedMixedGraph, AcyclicDirectedMixedGraph, FullySpecifiedGraph
 
 
 class PartiallySpecifiedGraph(Graph):

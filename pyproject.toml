@@ -25,7 +25,19 @@ dependencies = [
 ]
 
 [tool.setuptools]
+# Keep package_dir pointing at the repository root so setuptools can map discovered
+# packages under both src/ and the top-level folders like reproducibility.
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
+# Search for Python packages both inside src and at repository root (for reproducibility/baselines)
 where = ["src"]
+
+[project.optional-dependencies]
+# Extra dependencies needed only to run reproducibility scripts and baselines.
+# Keep this minimal: only packages not already listed under [project].dependencies
+reproducibility = [
+  "scipy",
+  "statsmodels",
+  "causal-learn"
+]

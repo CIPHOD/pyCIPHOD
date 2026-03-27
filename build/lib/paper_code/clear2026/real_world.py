@@ -18,7 +18,7 @@ from experiments_gaussian_scm import PC_CDE, ldecc_CDE, MBbyMB_CDE, CMB_CDE, loc
 root = Path(__file__).resolve().parent
 sys.path.extend([
     str(root),
-    str(root.parents[1] / "PyCIPHOD")
+    str(root.parents[1] / "pyciphod")
 ])
 
 

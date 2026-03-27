@@ -1,8 +1,6 @@
-#%%
-
+# this file was created before developping our own function to transfer a dag to a cpdag so we used the implementation of the causal-learn package
 import networkx as nx
 import random as rd
-import matplotlib.pyplot as plt
 from causallearn.graph.Edge import Edge
 from causallearn.graph.Endpoint import Endpoint
 from causallearn.graph.GraphNode import GraphNode
@@ -168,14 +166,3 @@ def random_DAG_nonidentifiable_CDE(size, prob, max_tries=10000):
 
     raise RuntimeError(f"Failed to find a NON CDE identifiable DAG after {max_tries} tries.")
 
-
-"""g, c, y, x = random_DAG_nonidentifiable_CDE(10, 0.1)
-
-for e in c.get_graph_edges() :
-    print(str(e))
-
-print(x,y)
-nx.draw(g, with_labels = True, 
-        pos=nx.circular_layout(g))
-plt.show()
-"""

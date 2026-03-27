@@ -19,14 +19,14 @@ np.random.seed(SEED)
 root = Path(__file__).resolve().parent
 sys.path.extend([
     str(root),
-    str(root.parents[1] / "PyCIPHOD")
+    str(root.parents[1] / "pyciphod")
 ])
 
 # Specific imports
 from reproducibility.clear2026.dags_generator import (
     random_DAG_nonidentifiable_CDE
 )
-from src.PyCIPHOD import LocPC
+from src.pyciphod import LocPC
 
 def simulate_linearSCM_from_dag(dag, nb_obs=1, coef_range=(-1,1), sigma_range=(0.5,1)):
     """Simulate linear SCM data from a DAG with random coefficients."""

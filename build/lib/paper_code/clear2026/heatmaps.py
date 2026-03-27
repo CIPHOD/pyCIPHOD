@@ -29,7 +29,7 @@ np.random.seed(SEED)
 root = Path(__file__).resolve().parent
 sys.path.extend([
     str(root),
-    str(root.parents[1] / "PyCIPHOD")
+    str(root.parents[1] / "pyciphod")
 ])
 
 
@@ -40,8 +40,8 @@ from reproducibility.clear2026.dags_generator import (
     random_DAG_identifiable_CDE
 )
 
-from src.PyCIPHOD.causal_discovery.pc.pc import PC
-from src.PyCIPHOD import LocPC
+from src.pyciphod.causal_discovery.pc.pc import PC
+from src.pyciphod import LocPC
 
 
 # =========================================================

@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="PyCIPHOD",
+    name="pyciphod",
     version="0.1",
     author="Charles Assaad, Federico Baldo, Simon Ferreira, Timothée Loranchet",
     author_email="charles.assaad@inserm.fr",

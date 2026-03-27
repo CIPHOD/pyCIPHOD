@@ -1,8 +1,8 @@
 #%%
 from causal_discovery.local.locpc import LocPC
 from causal_discovery.pc.pc import PC
-from utils.independence_tests.basic import FisherZ, Gsq
-from utils.background_knowledge.background_knowledge import BackgroundKnowledge
+from PyCIPHOD.utils.independence_tests.basic import FisherZ, Gsq
+from PyCIPHOD.utils.background_knowledge.background_knowledge import BackgroundKnowledge
 import numpy as np
 import pandas as pd
 
