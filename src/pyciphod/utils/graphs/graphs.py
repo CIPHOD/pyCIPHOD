@@ -1,6 +1,7 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 import numpy as np 
+from typing import Type, Optional
 
 
 class Graph:
@@ -258,7 +259,7 @@ class Graph:
 
     def get_confounded_adjacencies(self, vertex: str) -> list:
         """
-        sdsds
+        TODO
         :param vertex:
         :return:
         """
@@ -279,12 +280,15 @@ class Graph:
         # return confounded_adjacencies
 
     def all_paths(self, vertex_i: str, vertex_j: str):
+        # TODO
         1
 
     def all_confounded_paths(self, vertex_i: str, vertex_j: str):
+        # TODO
         1
 
     def counfounded_components(self):
+        # TODO
         1
 
     def draw_graph(self, treatment: set = None, outcome: set = None):
@@ -324,7 +328,36 @@ class Graph:
 
         nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=acyclic_edges, edge_color=directed_edge_color, arrowstyle='->')
         nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=cyclic_edges, edge_color=directed_edge_color, arrowstyle='->')
-        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=confounded_edges, arrowstyle='<|-|>', edge_color=confounded_edge_color)
+
+        # Draw confounded edges with FancyArrowPatch to ensure curved arcs with arrowheads on both sides.
+        from matplotlib.patches import FancyArrowPatch
+        try:
+            confounded_list = list(confounded_edges)
+        except Exception:
+            confounded_list = []
+        for idx, (u, v) in enumerate(confounded_list):
+            if u not in pos or v not in pos:
+                continue
+            # alternate curvature to reduce overlap
+            rad = 0.18 if (idx % 2 == 0) else -0.18
+            xyA = tuple(pos[u])
+            xyB = tuple(pos[v])
+            # shrink so arrows don't overlap node markers (in points)
+            shrink_pts = 8
+            # Draw a single curved, dashed, bidirected arrow (arrowheads both ends)
+            arrow = FancyArrowPatch(xyA, xyB,
+                                    connectionstyle=f"arc3,rad={rad}",
+                                    arrowstyle='<->',
+                                    mutation_scale=18,
+                                    color=confounded_edge_color,
+                                    linewidth=1.5,
+                                    shrinkA=shrink_pts, shrinkB=shrink_pts,
+                                    linestyle='dashed')
+            # ensure arrowheads are drawn above nodes and not clipped
+            arrow.set_zorder(3)
+            arrow.set_clip_on(False)
+            ax.add_patch(arrow)
+
         nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=undirected_edges, arrowstyle='-', edge_color=undirected_edge_color)
 
         dashed_arrow = [(u, v) for (u, v, t) in self.get_edges() if t == '-->']
@@ -336,7 +369,7 @@ class Graph:
                             style='solid', arrowstyle='-[')
 
         plt.axis('off')
-    plt.show()
+        plt.show()
 
 
 
@@ -362,14 +395,35 @@ class DirectedMixedGraph(Graph):
     def remove_undirected_edge(self, vertex_i: str, vertex_j: str) -> None:
         raise NotImplementedError("This function is not available for " + self.__class__.__name__)
 
+    def add_uncertain_edge(self, vertex_i: str, vertex_j: str) -> None:
+        raise NotImplementedError("This function is not available for " + self.__class__.__name__)
+
+    def remove_uncertain_edge(self, vertex_i: str, vertex_j: str) -> None:
+        raise NotImplementedError("This function is not available for " + self.__class__.__name__)
+
 
 class AcyclicDirectedMixedGraph(DirectedMixedGraph):
-    1
+    def __init__(self):
+        super().__init__()
+        # ensure current state is acyclic
+        if not self.is_acyclic():
+            raise ValueError("Initial directed edges contain a cycle; AcyclicDirectedMixedGraph must be acyclic")
 
 
 class DirectedAcyclicGraph(AcyclicDirectedMixedGraph):
     def __init__(self):
         super(AcyclicDirectedMixedGraph, self).__init__()
+
+    def add_directed_edge(self, vertex_i: str, vertex_j: str) -> None:
+        """Add a directed edge only if it does not create a cycle. If adding the edge would create a
+        directed cycle, the addition is rolled back and a ValueError is raised.
+        """
+        # Use the Graph implementation to add the edge, then validate acyclicity.
+        super().add_directed_edge(vertex_i, vertex_j)
+        if not self.is_acyclic():
+            # revert the change
+            super().remove_directed_edge(vertex_i, vertex_j)
+            raise ValueError(f"Adding directed edge {vertex_i}->{vertex_j} would create a cycle in AcyclicDirectedMixedGraph")
 
     def add_confounded_edge(self, vertex_i: str, vertex_j: str) -> None:
         raise NotImplementedError("This function is not available for " + self.__class__.__name__)
@@ -378,6 +432,79 @@ class DirectedAcyclicGraph(AcyclicDirectedMixedGraph):
         raise NotImplementedError("This function is not available for " + self.__class__.__name__)
 
 
+def create_random_admg(num_v: int,
+                             p_edge: float = 0.2,
+                             seed: Optional[int] = None):
+    """
+    Generate a random ADMG.
+
+    Parameters
+    ----------
+    num_v: int
+        Number of vertices in the graph.
+    p_edge: float (default=0.2)
+        Probability of adding an edge between any pair of vertices.
+    seed: int (optional)
+        Random seed for reproducibility.
+    Returns admg: AcyclicDirectedMixedGraph
+    """
+    rng = np.random.default_rng(seed)
+
+    v = [f"X{i}" for i in range(num_v)]
+
+    # produce a random topological order
+    order = list(v)
+    rng.shuffle(order)
+
+    admg = AcyclicDirectedMixedGraph()
+    for var in v:
+        admg.add_vertex(var)
+
+    # add edges from earlier -> later in the random order with probability p_edge
+    for i in range(len(order)):
+        for j in range(i + 1, len(order)):
+            src = order[i]
+            tgt = order[j]
+            if rng.random() < p_edge:
+                admg.add_directed_edge(src, tgt)
+            if rng.random() < p_edge:
+                admg.add_confounded_edge(src, tgt)
+    return admg
 
 
+def create_random_dag(num_v: int,
+                             p_edge: float = 0.2,
+                             seed: Optional[int] = None):
+    """
+    Generate a random DAG.
 
+    Parameters
+    ----------
+    num_v: int
+        Number of vertices in the graph.
+    p_edge: float (default=0.2)
+        Probability of adding an edge between any pair of vertices.
+    seed: int (optional)
+        Random seed for reproducibility.
+    Returns dag: DirectedAcyclicGraph
+    """
+    rng = np.random.default_rng(seed)
+
+    v = [f"X{i}" for i in range(num_v)]
+
+    # produce a random topological order
+    order = list(v)
+    rng.shuffle(order)
+
+    dag = AcyclicDirectedMixedGraph()
+    for var in v:
+        dag.add_vertex(var)
+
+    # add edges from earlier -> later in the random order with probability p_edge
+    for i in range(len(order)):
+        for j in range(i + 1, len(order)):
+            src = order[i]
+            tgt = order[j]
+            if rng.random() < p_edge:
+                dag.add_directed_edge(src, tgt)
+    return dag

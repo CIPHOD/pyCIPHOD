@@ -20,7 +20,7 @@ root = Path(__file__).resolve().parent
 
 
 # Specific imports
-from pyciphod.causal_discovery.pc.pc import PC
+from pyciphod.causal_discovery.basic.constraint_based import PC
 from pyciphod.causal_discovery.local.locpc import LocPC
 from pyciphod.utils.independence_tests.basic import Gsq
 
@@ -130,10 +130,10 @@ def ldecc_CDE(data, treatment, outcome):
     }
 
 def PC_CDE(data, treatment, outcome):
-    pc_alg = PC(data, ci_test=Gsq)
-    pc_alg.run()
-    edges = pc_alg.cpdag.get_directed_edges()
-    adj = pc_alg.cpdag.get_adjacencies(outcome)
+    pc_alg = PC(ci_test=Gsq)
+    pc_alg.run(data)
+    edges = pc_alg.g_hat.get_directed_edges()
+    adj = pc_alg.g_hat.get_adjacencies(outcome)
     ident = (outcome, treatment) in edges or treatment not in adj or all(
         (n, outcome) in edges or (outcome, n) in edges for n in adj
     )
@@ -252,7 +252,6 @@ def run_experiments(dag_generator,
 
             label = "NON-identifiable" if count_non_identifiable else "Identifiable"
             print(f"{method.upper()}: {label} proportion {proportion:.2f}")
-
     return pd.DataFrame(summary_rows), pd.DataFrame(detailed_rows)
 
 

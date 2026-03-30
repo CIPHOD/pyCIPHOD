@@ -33,6 +33,7 @@ package-dir = {"" = "src"}
 # Search for Python packages both inside src and at repository root (for reproducibility/baselines)
 where = ["src"]
 
+
 [project.optional-dependencies]
 # Extra dependencies needed only to run reproducibility scripts and baselines.
 # Keep this minimal: only packages not already listed under [project].dependencies
@@ -40,4 +41,7 @@ reproducibility = [
   "scipy",
   "statsmodels",
   "causal-learn"
+]
+dev = [
+  "pytest"
 ]

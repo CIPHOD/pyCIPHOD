@@ -1,5 +1,5 @@
 #%%
-from pc import PC
+from src.pyciphod.causal_discovery.basic.constraint_based import PC
 from causal_discovery.local.locpc import LocPC
 from PyCIPHOD.utils.independence_tests.basic import FisherZ, Gsq
 from PyCIPHOD.utils.background_knowledge.background_knowledge import BackgroundKnowledge

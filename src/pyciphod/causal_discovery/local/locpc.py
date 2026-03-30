@@ -1,10 +1,22 @@
+from abc import ABC, abstractmethod
+from typing import Type, Optional
+import pandas as pd
+from itertools import combinations
+
 from pyciphod.utils.graphs.partially_specified_graphs import LocalEssentialGraph
 from pyciphod.utils.independence_tests.basic import CiTests, FisherZ
 from pyciphod.utils.background_knowledge.background_knowledge import BackgroundKnowledge
-import pandas as pd
-from itertools import combinations
-from typing import Type, Optional
 
+
+class LocalConstraintBased(ABC):
+    """
+    Base class for local constraint-based causal discovery algorithms.
+    """
+    def __init__(self, sparsity: float = 0.05, ci_test: Type[CiTests] = FisherZ, background_knowledge: Optional[BackgroundKnowledge] = None):
+        self._sparsity = sparsity
+        self._ci_test = ci_test
+        self._bk = background_knowledge if background_knowledge is not None else BackgroundKnowledge()
+        self.neighborhood_h = set()
 
 
 class LocPC:

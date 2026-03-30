@@ -1,10 +1,9 @@
-#%%
 # =========================================
 # Imports and General Setup
 # =========================================
 import os
-import sys
 from pathlib import Path
+from scipy.special import expit
 
 import numpy as np
 import pandas as pd
@@ -16,23 +15,27 @@ SEED = 2025
 random.seed(SEED)
 np.random.seed(SEED)
 
-# Add paths for DAG generators and baselines
+# root (used for output path) — keep this file runnable as a script
 root = Path(__file__).resolve().parent
-sys.path.extend([
-    str(root),
-    str(root.parents[1] / "pyciphod")
-])
+
 
 # Specific imports
-from paper_code.clear2026.dags_generator import (
-    random_DAG_identifiable_CDE,
-    random_DAG_nonidentifiable_CDE
-)
-from baselines.Gupta_codes.ldecc import LDECCAlgorithm
-from baselines.pyCausalFS.LSL.MBs.CMB.CMB import CMB
-from baselines.pyCausalFS.LSL.MBs.MBbyMB import MBbyMB
-from pyciphod.causal_discovery.pc.pc import PC
+from pyciphod.causal_discovery.basic.constraint_based import PC
 from pyciphod.causal_discovery.local.locpc import LocPC
+
+# Optional dependencies (pyciphod internals + baselines).
+# Do not raise on import; instead set a flag and raise with instruction only when trying to run the script.
+REPRO_AVAILABLE = True
+REPRO_ERROR = None
+try:
+    from reproducibility.clear2026.dags_generator import random_DAG_identifiable_CDE, random_DAG_nonidentifiable_CDE
+    from reproducibility.clear2026.baselines.Gupta_codes.ldecc import LDECCAlgorithm
+    from reproducibility.clear2026.baselines.pyCausalFS.LSL.MBs.CMB.CMB import CMB
+    from reproducibility.clear2026.baselines.pyCausalFS.LSL.MBs.MBbyMB import MBbyMB
+except Exception as e:
+    REPRO_AVAILABLE = False
+    REPRO_ERROR = e
+
 
 # =========================================
 # Utility Functions
@@ -82,22 +85,25 @@ def ldecc_CDE(data, treatment, outcome):
         'nb_CI_tests': alg.nb_ci_tests
     }
 
+
 def PC_CDE(data, treatment, outcome):
-    pc_alg = PC(data)
-    pc_alg.run()
-    edges = pc_alg.cpdag.get_directed_edges()
-    adj = pc_alg.cpdag.get_adjacencies(outcome)
+    pc_alg = PC()
+    pc_alg.run(data)
+    edges = pc_alg.g_hat.get_directed_edges()
+    adj = pc_alg.g_hat.get_adjacencies(outcome)
     ident = (outcome, treatment) in edges or treatment not in adj or all(
         (n, outcome) in edges or (outcome, n) in edges for n in adj
     )
     adj_set = [p for (p, x) in edges if x==outcome] if ident else None
     return {'identifiability': ident, 'adjustment_set': adj_set, 'nb_CI_tests': pc_alg.nb_ci_tests}
 
+
 def CMB_CDE(data, treatment, outcome):
     res = CMB(data, data.columns.get_loc(outcome), 0.05, is_discrete=False)
     parents, children, pc, unoriented = replace_indices_by_names(data, res)
     ident = (treatment in children) or (treatment not in pc) or not unoriented
     return {'identifiability': ident, 'adjustment_set': list(parents) if ident else None, 'nb_CI_tests': res[4]}
+
 
 def MBbyMB_CDE(data, treatment, outcome):
     res = MBbyMB(data, data.columns.get_loc(outcome), 0.05, is_discrete=False)
@@ -184,11 +190,22 @@ if __name__ == "__main__":
     output_dir = root / "output_experiments_gaussian"
     os.makedirs(output_dir, exist_ok=True)
 
+    # Decide which methods to run depending on optional reproducibility dependencies
+    if not REPRO_AVAILABLE:
+        # Do not raise: run only core package methods so the script remains usable without extras
+        print("Optional reproducibility dependencies are missing. Running only core pyciphod methods (no baselines).")
+        methods_small = ['locpc', 'pc']
+        methods_large = ['locpc', 'pc']
+    else:
+        # All dependencies available: run baselines as well
+        methods_small = ['locpc', 'ldecc', 'pc', 'CMB', 'MBbyMB']  # all baselines
+        methods_large = ['locpc', 'ldecc', 'pc', 'CMB', 'MBbyMB']  # PC excluded (kept for parity with original list)
+
+
     # ----------------------------
     # Small DAGs (< 100 nodes)
     # ----------------------------
     small_sizes = [10, 20, 30, 40, 50]
-    methods_small = ['locpc', 'ldecc', 'pc', 'CMB', 'MBbyMB']  # all baselines
 
     # Identifiable DAGs
     ID_summary_small, ID_detailed_small = run_experiments(
@@ -208,7 +225,6 @@ if __name__ == "__main__":
     # Large DAGs (>= 100 nodes)
     # ----------------------------
     large_sizes = [100, 150, 200]
-    methods_large = ['locpc', 'ldecc', 'pc', 'CMB', 'MBbyMB']  # PC included
 
     # Identifiable DAGs
     ID_summary_large, ID_detailed_large = run_experiments(

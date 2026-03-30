@@ -14,7 +14,6 @@ import numpy as np
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 
 
 # =========================================================
@@ -26,25 +25,15 @@ np.random.seed(SEED)
 
 
 # =========================================================
-# Paths
-# =========================================================
-root = Path(__file__).resolve().parent
-sys.path.extend([
-    str(root),
-    str(root.parents[1] / "pyciphod")
-])
-
-
-# =========================================================
 # External Imports
 # =========================================================
-from paper_code.clear2026.dags_generator import (
+from reproducibility.clear2026.dags_generator import (
     random_DAG_identifiable_CDE,
     random_DAG_nonidentifiable_CDE
 )
 
-from PyCIPHOD.causal_discovery.pc.pc import PC
-from PyCIPHOD.causal_discovery.local.locpc import LocPC
+from pyciphod.causal_discovery.basic.pc.pc import PC
+from pyciphod.causal_discovery.local.locpc import LocPC
 
 
 # =========================================================
@@ -142,7 +131,7 @@ def neighborhood(g: nx.DiGraph, target: str):
 # =========================================================
 # Heatmap Plotting
 # =========================================================
-def plot_pc_vs_locpc_heatmaps(pc_obj, locpc_list, target, graph, save_path = None):
+def plot_pc_vs_locpc_heatmaps(pc_obj, locpc_list, target, graph):
     neighborhood = compute_neighborhood(graph, target)
     nodes = list(graph.nodes)
 
@@ -197,8 +186,6 @@ def plot_pc_vs_locpc_heatmaps(pc_obj, locpc_list, target, graph, save_path = Non
         )
     
     plt.tight_layout()
-    if save_path is not None:
-        fig.savefig(save_path, dpi=300)   # ← sauvegarde PNG ou PDF
     plt.show()
 
 
@@ -207,7 +194,7 @@ def plot_pc_vs_locpc_heatmaps(pc_obj, locpc_list, target, graph, save_path = Non
 # Animation
 # =========================================================
 def animate_pc_vs_locpc_hops(pc_obj, locpc_objs, target, g,
-                             interval=100, decay=0.5, save_path=None):
+                             interval=100, decay=0.5):
     import matplotlib.pyplot as plt
     import matplotlib.animation as animation
     import numpy as np
@@ -289,9 +276,7 @@ def animate_pc_vs_locpc_hops(pc_obj, locpc_objs, target, g,
         blit=True,
         repeat=False
     )
-    
-    if save_path is not None:
-        ani.save(save_path, writer='pillow', fps=10)  # ← sauvegarde GIF
+
 
     plt.show()
 
@@ -335,22 +320,9 @@ def main():
         pc,
         locpc_list,
         target=y,
-        graph=g,
-        save_path="paper_code/clear2026/figures/heatmap.png"
+        graph=g
     )
 
-    # ---------------------------------
-    # Animation
-    # ---------------------------------
-    # animate_pc_vs_locpc_hops(
-    #     pc,
-    #     locpc_list,
-    #     target=y,
-    #     g=g,
-    #     interval=100, 
-    #     decay = 0.8,
-    #     save_path="paper_code/clear2026/figures/anim.gif"
-    # )
 
 
 # =========================================================

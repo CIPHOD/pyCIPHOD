@@ -37,10 +37,12 @@ class TemporalPartiallyDirectedAcyclicGraph(PartiallyDirectedGraphs):
         
 
 
-class LocalEssentialGraph(Graph):
+class LocalEssentialGraph(PartiallyDirectedGraphs):
     def __init__(self):
         super().__init__()
 
 class PartialAncestralGraphs(PartiallyDirectedGraphs):
     def __init__(self):
         1
+
+
