@@ -8,14 +8,13 @@ from pyciphod.utils.independence_tests.basic import CiTests, FisherZ
 from pyciphod.utils.background_knowledge.background_knowledge import BackgroundKnowledge
 
 
-class ConstraintsBased(ABC):
+class ConstraintBased(ABC):
     def __init__(self, sparsity: float = 0.05, ci_test: Type[CiTests] = FisherZ, background_knowledge: Optional[BackgroundKnowledge] = None, twd: Optional[bool] = False):
         # self._data = data
         self._sparsity = sparsity
         self._ci_test = ci_test
         self._bk = background_knowledge if background_knowledge is not None else BackgroundKnowledge()
         self._twd = twd # Test wise deletion
-        # self._nodes = list(data.columns)
         self.performed_tests = set()
         self.nb_ci_tests = 0
         self.sepset = dict()
@@ -48,7 +47,7 @@ class ConstraintsBased(ABC):
         self._orientation()
 
 
-class PC(ConstraintsBased):
+class PC(ConstraintBased):
     """
     Implements the PC algorithm for causal discovery from observational data.
 
@@ -135,7 +134,6 @@ class PC(ConstraintsBased):
                 # Orient as u -> v instead
                 self.g_hat.remove_undirected_edge(v, u)
                 self.g_hat.add_directed_edge(u, v)
-            
 
     def _uc_rule(self):
         """
@@ -155,7 +153,46 @@ class PC(ConstraintsBased):
                         self.g_hat.remove_undirected_edge(y, z)
                         self.g_hat.add_directed_edges_from([(x, y), (z, y)])
 
-    def _meek_rules(self):
+    def _meek_rule_1(self, X, Y, Z):
+        """
+        :param X: a vertex in g
+        :param Y:  a vertex in g
+        :param Z:  a vertex in g
+        :return:  True if the conditions of Meek's Rule 1 are satisfied for the triple (X, Y, Z) in g, False otherwise.
+         Meek's Rule 1 states that if there is a directed edge from X to Y (X -> Y) and an undirected edge between Y and Z (Y - Z), and there is no edge between X and Z (X and Z are not adjacent), then we can orient the edge between Y and Z as Y -> Z.
+        """
+        if (X, Y) in self.g_hat.get_directed_edges() and (Y, Z) in self.g_hat.get_undirected_edges() and Z not in self.g_hat.get_adjacencies(X):
+            return True
+        return False
+
+    def _meek_rule_2(self, X, Y, Z):
+        """
+        :param X: a vertex in g
+        :param Y:  a vertex in g
+        :param Z:  a vertex in g
+        :return:  True if the conditions of Meek's Rule 2 are satisfied for the triple (X, Y, Z) in g, False otherwise.
+         Meek's Rule 2 states that if there is a directed edge from X to Y (X -> Y) and a directed edge from Y to Z (Y -> Z), and there is an undirected edge between X and Z (X - Z), then we can orient the edge between X and Z as X -> Z.
+        """
+        if (X, Y) in self.g_hat.get_directed_edges() and (Y, Z) in self.g_hat.get_directed_edges() and (X, Z) in self.g_hat.get_undirected_edges():
+            return True
+        return False
+
+    def _meek_rule_3(self, X, Y, Z, W):
+        """
+        :param g: a pattern of a CPDAG
+        :param X: a vertex in g
+        :param Y:  a vertex in g
+        :param Z:  a vertex in g
+        :return:  True if the conditions of Meek's Rule 3 are satisfied for the triple (X, Y, Z) and vertex W in g, False otherwise.
+         Meek's Rule 3 states that if there is a directed edge from X to Y (X -> Y) and a directed edge from Z to Y (Z -> Y), and there is an undirected edge between X and Z (X - Z), and there exists a vertex W such that there are undirected edges between W and Y (W - Y), W and X (W - X), and W and Z (W - Z), then we can orient the edge between X and Z as X -> Z.
+        """
+        if (X, Y) in self.g_hat.get_directed_edges() and (Z, Y) in self.g_hat.get_directed_edges() and Z not in self.g_hat.get_adjacencies(X):
+            if (W, Y) in self.g_hat.get_undirected_edges() and (W, X) in self.g_hat.get_undirected_edges() and (
+            W, Z) in self.g_hat.get_undirected_edges():
+                return True
+        return False
+
+    def _apply_meek_rules(self):
         """
         Apply Meek's orientation rules iteratively using only edge sets:
         Rule 1, Rule 2, Rule 3 for propagating orientations in a CPDAG.
@@ -169,13 +206,15 @@ class PC(ConstraintsBased):
             for y in adj[x]:
                 # Rule 1:
                 for z in set(adj[y]) - set(adj[x]):
-                    if (x,y) in self.g_hat.get_directed_edges() and (y,z) in self.g_hat.get_undirected_edges():
+                    if self._meek_rule_1(x, y, z):
+                    # if (x,y) in self.g_hat.get_directed_edges() and (y,z) in self.g_hat.get_undirected_edges():
                         changed = True
                         self.g_hat.remove_undirected_edge(z, y)
                         self.g_hat.add_directed_edge(y, z)
                 # Rule 2:
                 for z in set(adj[y]) & set(adj[x]):
-                    if (x,y) in self.g_hat.get_directed_edges() and (y,z) in self.g_hat.get_directed_edges() and (x,z) in self.g_hat.get_undirected_edges():
+                    if self._meek_rule_2(x, y, z):
+                    # if (x,y) in self.g_hat.get_directed_edges() and (y,z) in self.g_hat.get_directed_edges() and (x,z) in self.g_hat.get_undirected_edges():
                         changed = True
                         self.g_hat.remove_undirected_edge(x, z)
                         self.g_hat.add_directed_edge(x, z)
@@ -189,12 +228,12 @@ class PC(ConstraintsBased):
                     if (z, y) not in self.g_hat.get_directed_edges():
                         continue
                     for w in set(adj[x]) & set(adj[y]) & set(adj[z]):
-                        undirected_triplet = [(w, y), (w, x), (z, w)]
-                        if all(edge in self.g_hat.get_undirected_edges() for edge in undirected_triplet):
+                        if self._meek_rule_3(x, y, z, w):
+                        # undirected_triplet = [(w, y), (w, x), (z, w)]
+                        # if all(edge in self.g_hat.get_undirected_edges() for edge in undirected_triplet):
                             changed = True
                             self.g_hat.remove_undirected_edge(w, y)
                             self.g_hat.add_directed_edge(w, y)
-
         return changed
 
     def _orientation(self):
@@ -202,7 +241,8 @@ class PC(ConstraintsBased):
         self._uc_rule()
         repeat = True
         while repeat:
-            repeat = self._meek_rules()
+            # self.g_hat, changed = apply_meek_rules(self.g_hat)
+            repeat = self._apply_meek_rules()
 
 
 class RestPC(PC):
@@ -218,17 +258,18 @@ class RestPC(PC):
         self._uc_rule()
 
 
-class FCI(ConstraintsBased):
+class FCI(ConstraintBased):
     def __init__(self, sparsity: float = 0.05, ci_test: CiTests = FisherZ, background_knowledge: BackgroundKnowledge = None, twd = False):
         super().__init__(sparsity, ci_test, background_knowledge, twd)
         # Additional attributes for FCI can be defined here, such as the PAG representation and rules for handling latent confounders and selection bias.
 
 
     def _skeleton(self, data: pd.DataFrame = None):
+        # TODO
         1
 
 
     def _orientation(self):
-        """Orient edges using the UC rule and iterative Meek rules until convergence."""
+        # TODO
         1
 

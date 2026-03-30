@@ -3,20 +3,29 @@ from typing import Type, Optional
 import pandas as pd
 from itertools import combinations
 
+from pyciphod.causal_discovery.basic.constraint_based import ConstraintBased
+from pyciphod.causal_discovery.basic.constraint_based import PC
 from pyciphod.utils.graphs.partially_specified_graphs import LocalEssentialGraph
 from pyciphod.utils.independence_tests.basic import CiTests, FisherZ
 from pyciphod.utils.background_knowledge.background_knowledge import BackgroundKnowledge
 
 
-class LocalConstraintBased(ABC):
-    """
-    Base class for local constraint-based causal discovery algorithms.
-    """
-    def __init__(self, sparsity: float = 0.05, ci_test: Type[CiTests] = FisherZ, background_knowledge: Optional[BackgroundKnowledge] = None):
-        self._sparsity = sparsity
-        self._ci_test = ci_test
-        self._bk = background_knowledge if background_knowledge is not None else BackgroundKnowledge()
-        self.neighborhood_h = set()
+# class LocalConstraintBased(ABC, ConstraintBased):
+#     """
+#     Base class for local constraint-based causal discovery algorithms.
+#     """
+#     def __init__(self, sparsity: float = 0.05, ci_test: Type[CiTests] = FisherZ, background_knowledge: Optional[BackgroundKnowledge] = None, twd: Optional[bool] = False):
+#         super().__init__(sparsity=sparsity, ci_test=ci_test, background_knowledge=background_knowledge, twd=twd)
+#         # self._sparsity = sparsity
+#         # self._ci_test = ci_test
+#         # self._bk = background_knowledge if background_knowledge is not None else BackgroundKnowledge()
+#         # self.twd = twd
+#         # self.performed_tests = set()
+#         # self.nb_ci_tests = 0
+#         # self.sepset = dict()
+#         # self.g_hat = self._initialize_graph() # Graph representation (e.g., LEG for PC)
+#
+#         self.neighborhood_h = set()
 
 
 class LocPC:
@@ -76,8 +85,6 @@ class LocPC:
         #         for n in self.leg.get_adjacencies(d)
         #         if n not in self._non_descendants[d]
         #     }
-        
-    
     
     def _apply_background_knowledge(self):
         """
@@ -89,11 +96,6 @@ class LocPC:
             return 
 
         # --- Step 1: enforce mandatory and forbidden edges ---
-        # Remove forbidden edges if present
-        # for u, v in self._bk.get_forbidden_edges():
-        #     if (u, v) in self.leg.get_undirected_edges() or (v, u) in self.leg.get_undirected_edges():
-        #         self.leg.remove_undirected_edge(u, v)
-        #         self.leg.remove_undirected_edge(v, u)
 
         # Add mandatory edges if missing
         for u, v in self._bk.get_mandatory_edges():
