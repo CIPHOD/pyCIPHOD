@@ -21,7 +21,8 @@ root = Path(__file__).resolve().parent
 
 # Specific imports
 from pyciphod.causal_discovery.basic.constraint_based import PC
-from pyciphod.causal_discovery.local.locpc import LocPC
+from pyciphod.causal_discovery.local.local_constraint_based import LocPC
+
 
 # Optional dependencies (pyciphod internals + baselines).
 # Do not raise on import; instead set a flag and raise with instruction only when trying to run the script.
@@ -67,13 +68,14 @@ def replace_indices_by_names(data, res):
 # CDE Estimation Methods
 # =========================================
 def locpc_CDE(data, treatment, outcome):
-    alg = LocPC(data)
-    res = alg.run_locPC_CDE(treatment, outcome)
+    alg = LocPC(outcome)
+    res = alg.run_locPC_CDE(treatment, outcome, data)
     return {
         'identifiability': res['identifiability'],
         'adjustment_set': res['adjustment_set'],
         'nb_CI_tests': alg.nb_ci_tests
     }
+
 
 def ldecc_CDE(data, treatment, outcome):
     alg = LDECCAlgorithm(treatment_node=outcome, outcome_node=outcome, use_ci_oracle=False)

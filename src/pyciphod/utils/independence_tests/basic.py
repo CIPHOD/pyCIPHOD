@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import pandas as pd
 import numpy as np
 from scipy.stats import norm, chi2
@@ -5,8 +6,9 @@ from scipy.stats import norm, chi2
 from sklearn.linear_model import LinearRegression as lr
 from sklearn.feature_selection import f_regression as fr
 
-class CiTests:
-    def __init__(self, x, y, cond_list=None):
+
+class CiTests(ABC):
+    def __init__(self, x, y, cond_list=None, drop_na=False):
         super(CiTests, self).__init__()
         self.x = x
         self.y = y
@@ -14,12 +16,121 @@ class CiTests:
             self.cond_list = []
         else:
             self.cond_list = cond_list
+        self.drop_na = drop_na
+
+    def _prepare_data(self, df):
+        if self.drop_na:
+            return df.dropna(subset=[self.x, self.y] + self.cond_list)
+        return df
+
+    @abstractmethod
+    def get_dependence(self, df):
+        pass
+
+    @abstractmethod
+    def get_pvalue(self, df):
+        pass
+
+    def get_pvalue_by_permutation(self, df, n_permutations: int = 1000, seed: int = None):
+        """
+        Generic permutation-based p-value estimator for conditional independence tests.
+
+        Procedure (Monte-Carlo):
+        - Prepare the data via _prepare_data.
+        - Compute the observed dependence statistic via get_dependence.
+        - For each permutation: permute the values of X (stratified within conditioning set if present),
+          recompute the dependence statistic on the permuted dataset.
+        - Compute the p-value as (count_perm_ge_obs + 1) / (n_permutations + 1) (to avoid zero p-values).
+
+        Args:
+            df (pd.DataFrame): data frame with the variables.
+            n_permutations (int): number of permutations to perform (default 1000).
+            random_state (int): optional random seed for reproducibility.
+
+        Returns:
+            float: estimated p-value (or np.nan if test statistic cannot be computed).
+        """
+        df_pre = self._prepare_data(df)
+
+        # Need sufficient samples
+        if df_pre.shape[0] <= 1:
+            return np.nan
+
+        # observed statistic
+        try:
+            obs = self.get_dependence(df_pre)
+        except Exception:
+            return np.nan
+
+        if obs is None or (isinstance(obs, float) and np.isnan(obs)):
+            return np.nan
+
+        obs_val = abs(obs)
+
+        rng = np.random.default_rng(seed)
+        X_orig = df_pre[self.x].values
+        n = len(X_orig)
+
+        count = 0
+        # Precompute group indices if conditioning set present
+        if self.cond_list:
+            try:
+                groups = df_pre.groupby(self.cond_list).indices
+            except Exception:
+                # fallback to no stratification
+                groups = None
+        else:
+            groups = None
+
+        for _ in range(n_permutations):
+            permuted_x = np.empty_like(X_orig)
+            if groups and len(groups) > 0:
+                # Permute within each group
+                permuted_x[:] = X_orig
+                for _, idx in groups.items():
+                    if len(idx) <= 1:
+                        continue
+                    permuted_x[idx] = X_orig[np.array(idx)[rng.permutation(len(idx))]]
+            else:
+                permuted_x = X_orig[rng.permutation(n)]
+
+            df_perm = df_pre.copy()
+            df_perm[self.x] = permuted_x
+
+            try:
+                stat = self.get_dependence(df_perm)
+            except Exception:
+                # ignore permutations that fail
+                continue
+
+            if stat is None or (isinstance(stat, float) and np.isnan(stat)):
+                continue
+
+            if abs(stat) >= obs_val:
+                count += 1
+
+        # p-value with +1 correction
+        pval = (count + 1) / (n_permutations + 1)
+        return float(pval)
+
+
+class TTestForRegressionCoefficient(CiTests):
+    def __init__(self, x, y, cond_list=None, drop_na=False):
+        super().__init__(x, y, cond_list, drop_na)
 
     def get_dependence(self, df):
-        print("To be implemented")
+        df = self._prepare_data(df)
+        X_data = df[[self.x] + self.cond_list].values
+        Y_data = df[self.y].values
+        reg = lr().fit(X_data, Y_data)
+        return reg.coef_[0]
 
     def get_pvalue(self, df):
-        print("To be implemented")
+        df = self._prepare_data(df)
+        X_data = df[[self.x] + self.cond_list].values
+        Y_data = df[self.y].values
+        pval = fr(X_data, Y_data)[1][0]
+        return pval
 
 
 class FisherZ(CiTests):
@@ -29,20 +140,21 @@ class FisherZ(CiTests):
     Reference: Spirtes et al., "Causation, Prediction, and Search".
     """
 
-    def __init__(self, x, y, cond_list=None):
+    def __init__(self, x, y, cond_list=None, drop_na=False):
         """
         Initialize the test with variables X, Y and optional conditioning set Z.
         :param x: str, name of first variable
         :param y: str, name of second variable
         :param cond_list: list of str, conditioning variables
         """
-        super().__init__(x, y, cond_list)
+        super().__init__(x, y, cond_list, drop_na)
 
     def get_dependence(self, df):
         """
         Compute the partial correlation between X and Y given Z.
         Returns a correlation coefficient r in [-1,1].
         """
+        df = self._prepare_data(df)
         list_nodes = [self.x, self.y] + self.cond_list
         df = df[list_nodes]
         a = df.values.T
@@ -61,7 +173,6 @@ class FisherZ(CiTests):
         else:
             inv = np.linalg.inv(sub_corr_matrix)
             r = -inv[0, 1] / np.sqrt(inv[0, 0] * inv[1, 1])
-
         return r
 
     def get_pvalue(self, df):
@@ -72,6 +183,7 @@ class FisherZ(CiTests):
             test statistic = sqrt(n - |Z| - 3) * |z|
         Returns a two-sided p-value.
         """
+        df = self._prepare_data(df)
         r = self.get_dependence(df)
         # Avoid numerical issues for r=1
         if r == 1:
@@ -88,8 +200,8 @@ class Gsq(CiTests):
     Reference: Spirtes et al., "Causation, Prediction, and Search".
     """
 
-    def __init__(self, x, y, cond_list=None):
-        super().__init__(x, y, cond_list)
+    def __init__(self, x, y, cond_list=None, drop_na=False):
+        super().__init__(x, y, cond_list, drop_na)
 
     def _contingency_table(self, df):
         """
@@ -113,6 +225,7 @@ class Gsq(CiTests):
         """
         Returns the G² statistic safely without runtime warnings.
         """
+        df = self._prepare_data(df)
         tables = self._contingency_table(df)
         g2_stat = 0
 
@@ -138,6 +251,7 @@ class Gsq(CiTests):
         Returns the p-value of the G² test.
         Degrees of freedom = (|X|-1)*(|Y|-1)*prod(|Z_i|) for each conditioning state.
         """
+        df = self._prepare_data(df)
         tables = self._contingency_table(df)
         g2_stat = self.get_dependence(df)
         # Compute df
@@ -148,45 +262,18 @@ class Gsq(CiTests):
         pval = 1 - chi2.cdf(g2_stat, df_total)
         return pval
 
-
-
-### MISSING DATA, TEST WISE DELETION 
-
+### MISSING DATA, TEST WISE DELETION
 # class TWDFisherZ(CiTests):
 #     def __init__(self, x, y, cond_list=None):
 #         super().__init__(x, y, cond_list)
 #         self._fisherz = FisherZ(self.x, self.y, self.cond_list)
-
 #     def get_dependence(self, df):
 #         df_clean = df.dropna(subset=[self.x, self.y] + self.cond_list)
 #         if df_clean.shape[0] < len(self.cond_list) + 3:
 #             return np.nan
 #         return self._fisherz.get_dependence(df_clean)
-
 #     def get_pvalue(self, df):
 #         df_clean = df.dropna(subset=[self.x, self.y] + self.cond_list)
 #         if df_clean.shape[0] < len(self.cond_list) + 3:
 #             return np.nan
 #         return self._fisherz.get_pvalue(df_clean)
-
-
-
-
-class LinearRegression:
-    def __init__(self, x, y, cond_list=[]):
-        self.x = x
-        self.y = y
-        self.list_nodes = [x] + cond_list
-
-    def get_coeff(self, df):
-        X_data = df[self.list_nodes].values
-        Y_data = df[self.y].values
-        reg = lr().fit(X_data, Y_data)
-
-        return reg.coef_[0]
-
-    def test_zeo_coef(self, df):
-        X_data = df[self.list_nodes].values
-        Y_data = df[self.y].values
-        pval = fr(X_data, Y_data)[1][0]
-        return pval

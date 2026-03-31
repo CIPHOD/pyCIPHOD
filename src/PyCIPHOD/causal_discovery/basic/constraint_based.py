@@ -87,9 +87,9 @@ class PC(ConstraintBased):
             for x in nodes:
                 if len(adj[x]) - 1 >= s:
                     repeat = True
-                    for y in adj[x]:
-                        for S in combinations([a for a in adj[x] if a != y], s):
-                            test = self._ci_test(x, y, list(S))
+                    for y in sorted(adj[x]):
+                        for S in combinations([a for a in sorted(adj[x]) if a != y], s):
+                            test = self._ci_test(x, y, list(S), self._twd)
                             self.performed_tests.add((x,y,S))
                             self.nb_ci_tests += 1
                             if self._twd:
@@ -144,9 +144,9 @@ class PC(ConstraintBased):
         nodes = self.g_hat.get_vertices()
         adj = {x: self.g_hat.get_adjacencies(x) for x in nodes}
         for x in nodes:
-            for y in adj[x]:
-                for z in adj[y]:
-                    if z == x or z in adj[x]:
+            for y in sorted(adj[x]):
+                for z in sorted(adj[y]):
+                    if z == x or z in sorted(adj[x]):
                         continue
                     if y not in self.sepset.get((x, z), []):
                         self.g_hat.remove_undirected_edge(x, y)
@@ -203,16 +203,16 @@ class PC(ConstraintBased):
         adj = {x: self.g_hat.get_adjacencies(x) for x in nodes}
         
         for x in nodes:
-            for y in adj[x]:
+            for y in sorted(adj[x]):
                 # Rule 1:
-                for z in set(adj[y]) - set(adj[x]):
+                for z in sorted(set(adj[y]) - set(adj[x])):
                     if self._meek_rule_1(x, y, z):
                     # if (x,y) in self.g_hat.get_directed_edges() and (y,z) in self.g_hat.get_undirected_edges():
                         changed = True
                         self.g_hat.remove_undirected_edge(z, y)
                         self.g_hat.add_directed_edge(y, z)
                 # Rule 2:
-                for z in set(adj[y]) & set(adj[x]):
+                for z in sorted(set(adj[y]) & set(adj[x])):
                     if self._meek_rule_2(x, y, z):
                     # if (x,y) in self.g_hat.get_directed_edges() and (y,z) in self.g_hat.get_directed_edges() and (x,z) in self.g_hat.get_undirected_edges():
                         changed = True
@@ -224,10 +224,10 @@ class PC(ConstraintBased):
             for y in adj[x]:
                 if (x, y) not in self.g_hat.get_directed_edges():
                     continue
-                for z in set(adj[y]) - set(adj[x]):
+                for z in sorted(set(adj[y]) - set(adj[x])):
                     if (z, y) not in self.g_hat.get_directed_edges():
                         continue
-                    for w in set(adj[x]) & set(adj[y]) & set(adj[z]):
+                    for w in sorted(set(adj[x]) & set(adj[y]) & set(adj[z])):
                         if self._meek_rule_3(x, y, z, w):
                         # undirected_triplet = [(w, y), (w, x), (z, w)]
                         # if all(edge in self.g_hat.get_undirected_edges() for edge in undirected_triplet):

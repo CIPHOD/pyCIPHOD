@@ -1,30 +1,39 @@
-import os
-import sys
 from pathlib import Path
 import random
 
 import numpy as np
 import pandas as pd
-import networkx as nx
-from pprint import pprint
 
 # Reproducibility
 SEED = 2025
 random.seed(SEED)
 np.random.seed(SEED)
 
+
 # Add project paths
 root = Path(__file__).resolve().parent
-sys.path.extend([
-    str(root),
-    str(root.parents[1] / "pyciphod")
-])
+
 
 # Import CDE methods
 from experiments_gaussian_scm import PC_CDE, ldecc_CDE, MBbyMB_CDE, CMB_CDE, locpc_CDE
 
+
+# Optional dependencies (pyciphod internals + baselines).
+# Do not raise on import; instead set a flag and raise with instruction only when trying to run the script.
+REPRO_AVAILABLE = True
+REPRO_ERROR = None
+try:
+    from reproducibility.clear2026.dags_generator import random_DAG_identifiable_CDE, random_DAG_nonidentifiable_CDE
+    from reproducibility.clear2026.baselines.Gupta_codes.ldecc import LDECCAlgorithm
+    from reproducibility.clear2026.baselines.pyCausalFS.LSL.MBs.CMB.CMB import CMB
+    from reproducibility.clear2026.baselines.pyCausalFS.LSL.MBs.MBbyMB import MBbyMB
+except Exception as e:
+    REPRO_AVAILABLE = False
+    REPRO_ERROR = e
+
+
 # Load dataset
-df = pd.read_csv('paper_code/clear2026/SNDS_agreg.csv', sep=';')
+df = pd.read_csv('../../datasets/SNDS_agreg.csv', sep=';')
 
 # Filter out sex = 9
 df_filtered = df[df['sexe'] == 9]
@@ -59,15 +68,33 @@ data_arcsin = np.arcsin(np.sqrt(data / 100))
 x = 'Insuffisance rénale chronique terminale'
 y = 'Diabète'
 
-# Run CDE methods
-results = {
-    "LocPC": locpc_CDE(data, x, y),
-    "PC": PC_CDE(data, x, y),
-    "LDECC": ldecc_CDE(data, x, y),
-    "CMB": CMB_CDE(data, x, y),
-    "MBbyMB": MBbyMB_CDE(data, x, y),
-}
+if not REPRO_AVAILABLE:
+    # Do not raise: run only core package methods so the script remains usable without extras
+    print("Optional reproducibility dependencies are missing. Running only core pyciphod methods (no baselines).")
+    methods = ['locpc', 'pc']
+else:
+    # All dependencies available: run baselines as well
+    methods = ['locpc', 'ldecc', 'pc', 'CMB', 'MBbyMB']  # all baselines
 
-# Display results
-print("\nCDE estimation results:")
-pprint(results)
+# Run CDE methods
+# results = {
+#     "LocPC": locpc_CDE(data, x, y),
+#     "PC": PC_CDE(data, x, y),
+#     "LDECC": ldecc_CDE(data, x, y),
+#     "CMB": CMB_CDE(data, x, y),
+#     "MBbyMB": MBbyMB_CDE(data, x, y),
+# }
+
+for method in methods:
+    print(f"Running method : {method}")
+    res = {
+        'locpc': locpc_CDE,
+        'ldecc': ldecc_CDE,
+        'pc': PC_CDE,
+        'CMB': CMB_CDE,
+        'MBbyMB': MBbyMB_CDE
+    }[method](data, x, y)
+
+    # Display results
+    print("\nCDE estimation results:")
+    print(res)

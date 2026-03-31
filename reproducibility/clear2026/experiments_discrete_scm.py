@@ -21,7 +21,7 @@ root = Path(__file__).resolve().parent
 
 # Specific imports
 from pyciphod.causal_discovery.basic.constraint_based import PC
-from pyciphod.causal_discovery.local.locpc import LocPC
+from pyciphod.causal_discovery.local.local_constraint_based import LocPC
 from pyciphod.utils.independence_tests.basic import Gsq
 
 # Optional dependencies (pyciphod internals + baselines).
