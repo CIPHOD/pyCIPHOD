@@ -1,0 +1,9 @@
+SNDS_agreg:
+
+
+monitoring_data:
+    anomaly_start = 46683
+    anomaly_end = 46783
+
+
+

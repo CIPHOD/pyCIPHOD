@@ -34,7 +34,7 @@ from baselines.pyCausalFS.LSL.MBs.CMB.CMB import CMB
 from baselines.pyCausalFS.LSL.MBs.MBbyMB import MBbyMB
 from src.pyciphod.causal_discovery.pc.pc import PC
 from src.pyciphod import LocPC
-from src.pyciphod.utils.independence_tests.basic import Gsq
+from src.pyciphod.utils.stat_tests.independence_tests import Gsq
 
 # =========================================
 # Binary SCM Simulation (Logistic)

@@ -14,15 +14,16 @@ def pc():
 class DummyTest:
     """Dummy CI test class to contrôler les p-values retournées pour (x,y,S)."""
 
-    def __init__(self, x, y, cond_list=None):
+    def __init__(self, x, y, cond_list=None, drop_na=False):
         self.x = x
         self.y = y
         self.cond_list = cond_list or []
+        self.drop_na = drop_na
 
     P_MAP = {}
 
     def get_pvalue(self, df):
-        key = (self.x, self.y, tuple(self.cond_list))
+        key = (self.x, self.y, tuple(self.cond_list), self.drop_na)
         # Essayer la clé symétrique si absente
         if key in DummyTest.P_MAP:
             return DummyTest.P_MAP[key]

@@ -4,7 +4,7 @@ import pandas as pd
 from itertools import combinations
 
 from pyciphod.utils.graphs.partially_specified_graphs import CompletedPartiallyDirectedAcyclicGraph
-from pyciphod.utils.independence_tests.basic import CiTests, FisherZ
+from pyciphod.utils.stat_tests.independence_tests import CiTests, FisherZ
 from pyciphod.utils.background_knowledge.background_knowledge import BackgroundKnowledge
 
 
