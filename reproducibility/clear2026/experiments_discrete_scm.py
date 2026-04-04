@@ -22,7 +22,7 @@ root = Path(__file__).resolve().parent
 # Specific imports
 from pyciphod.causal_discovery.basic.constraint_based import PC
 from pyciphod.causal_discovery.local.local_constraint_based import LocPC
-from pyciphod.utils.independence_tests.basic import Gsq
+from pyciphod.utils.independence_tests.basic import GsqTest as Gsq
 
 # Optional dependencies (pyciphod internals + baselines).
 # Do not raise on import; instead set a flag and raise with instruction only when trying to run the script.

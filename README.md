@@ -28,11 +28,13 @@ PyCIPHOD is a robust and versatile Python package developed and maintained by th
 
 
 ### Causal discovery
+* Classical causal discovery:  Learn the entire causal structure of the dataset, which can be computationally intensive and may not always be necessary for specific research questions.
+
 * Local causal discovery: Focus on discovering causal relations in a specific part of the causal graph, particularly around a target variable (such as a treatment or outcome), rather than attempting to learn the entire causal structure of the dataset. This approach is computationally more efficient because it limits the scope to the local neighborhood of the target variable.
 
 * Federated causal discovery: Harness the power of distributed data sources while preserving data privacy.
 
-* Collaborative causal discovery: Integrate and synthesize causal knowledge from multiple datasets to enhance the robustness of your findings.
+* Difference graph discovery: Identify changes in causal relationships over time by comparing causal graphs at different time points, enabling the detection of temporal shifts in causality.
 
 
 ### Causal reasoning and estimation

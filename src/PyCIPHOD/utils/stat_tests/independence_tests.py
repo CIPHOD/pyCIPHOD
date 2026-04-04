@@ -6,10 +6,13 @@ from scipy.stats import norm, chi2
 from sklearn.linear_model import LinearRegression as lr
 from sklearn.feature_selection import f_regression as fr
 
+from .dependency_measures import DependenceMeasures, PartialCorrelation, LinearRegressionCoefficient, Gsq, CMIh, KernelPartialCorrelation
 
-class CiTests(ABC):
+
+class CiTests(DependenceMeasures, ABC):
     def __init__(self, x, y, cond_list=None, drop_na=False):
-        super(CiTests, self).__init__()
+        # Ensure DependenceMeasures is initialized with the same args
+        super().__init__(x, y, cond_list, drop_na)
         self.x = x
         self.y = y
         if cond_list is None:
@@ -18,14 +21,6 @@ class CiTests(ABC):
             self.cond_list = cond_list
         self.drop_na = drop_na
 
-    def _prepare_data(self, df):
-        if self.drop_na:
-            return df.dropna(subset=[self.x, self.y] + self.cond_list)
-        return df
-
-    @abstractmethod
-    def get_dependence(self, df):
-        pass
 
     @abstractmethod
     def get_pvalue(self, df):
@@ -45,7 +40,7 @@ class CiTests(ABC):
         Args:
             df (pd.DataFrame): data frame with the variables.
             n_permutations (int): number of permutations to perform (default 1000).
-            random_state (int): optional random seed for reproducibility.
+            seed (int): optional random seed for reproducibility.
 
         Returns:
             float: estimated p-value (or np.nan if test statistic cannot be computed).
@@ -114,16 +109,18 @@ class CiTests(ABC):
         return float(pval)
 
 
-class TTestForRegressionCoefficient(CiTests):
+class LinearRegressionCoefficientTTest(CiTests, LinearRegressionCoefficient):
     def __init__(self, x, y, cond_list=None, drop_na=False):
         super().__init__(x, y, cond_list, drop_na)
 
-    def get_dependence(self, df):
-        df = self._prepare_data(df)
-        X_data = df[[self.x] + self.cond_list].values
-        Y_data = df[self.y].values
-        reg = lr().fit(X_data, Y_data)
-        return reg.coef_[0]
+    # def get_dependence(self, df):
+    #     # df = self._prepare_data(df)
+    #     # X_data = df[[self.x] + self.cond_list].values
+    #     # Y_data = df[self.y].values
+    #     # reg = lr().fit(X_data, Y_data)
+    #     dep = LinearRegressionCoefficient(self.x, self.y, self.cond_list, self.drop_na)
+    #     res = dep.get_dependence(df)
+    #     return res
 
     def get_pvalue(self, df):
         df = self._prepare_data(df)
@@ -133,7 +130,7 @@ class TTestForRegressionCoefficient(CiTests):
         return pval
 
 
-class FisherZ(CiTests):
+class FisherZTest(CiTests, PartialCorrelation):
     """
     Continuous conditional independence test using the Fisher Z-transform.
     Suitable for Gaussian data. Computes partial correlations and corresponding p-values.
@@ -149,31 +146,34 @@ class FisherZ(CiTests):
         """
         super().__init__(x, y, cond_list, drop_na)
 
-    def get_dependence(self, df):
-        """
-        Compute the partial correlation between X and Y given Z.
-        Returns a correlation coefficient r in [-1,1].
-        """
-        df = self._prepare_data(df)
-        list_nodes = [self.x, self.y] + self.cond_list
-        df = df[list_nodes]
-        a = df.values.T
-
-        if len(self.cond_list) > 0:
-            cond_list_int = [i + 2 for i in range(len(self.cond_list))]
-        else:
-            cond_list_int = []
-
-        correlation_matrix = np.corrcoef(a)
-        var = list((0, 1) + tuple(cond_list_int))
-        sub_corr_matrix = correlation_matrix[np.ix_(var, var)]
-
-        if np.linalg.det(sub_corr_matrix) == 0:
-            r = 1
-        else:
-            inv = np.linalg.inv(sub_corr_matrix)
-            r = -inv[0, 1] / np.sqrt(inv[0, 0] * inv[1, 1])
-        return r
+    # def get_dependence(self, df):
+    #     """
+    #     Compute the partial correlation between X and Y given Z.
+    #     Returns a correlation coefficient r in [-1,1].
+    #     """
+    #     df = self._prepare_data(df)
+    #     dep = PartialCorrelation(self.x, self.y, self.cond_list, self.drop_na)
+    #     r = dep.get_dependence(df)
+    #
+    #     # list_nodes = [self.x, self.y] + self.cond_list
+    #     # df = df[list_nodes]
+    #     # a = df.values.T
+    #     #
+    #     # if len(self.cond_list) > 0:
+    #     #     cond_list_int = [i + 2 for i in range(len(self.cond_list))]
+    #     # else:
+    #     #     cond_list_int = []
+    #     #
+    #     # correlation_matrix = np.corrcoef(a)
+    #     # var = list((0, 1) + tuple(cond_list_int))
+    #     # sub_corr_matrix = correlation_matrix[np.ix_(var, var)]
+    #     #
+    #     # if np.linalg.det(sub_corr_matrix) == 0:
+    #     #     r = 1
+    #     # else:
+    #     #     inv = np.linalg.inv(sub_corr_matrix)
+    #     #     r = -inv[0, 1] / np.sqrt(inv[0, 0] * inv[1, 1])
+    #     return r
 
     def get_pvalue(self, df):
         """
@@ -185,16 +185,26 @@ class FisherZ(CiTests):
         """
         df = self._prepare_data(df)
         r = self.get_dependence(df)
-        # Avoid numerical issues for r=1
-        if r == 1:
-            r -= 1e-10
+        # validate correlation
+        if r is None or not np.isfinite(r):
+            return np.nan
+
+        # Effective sample size for Fisher Z
+        n_eff = df.shape[0] - len(self.cond_list) - 3
+        if n_eff <= 0:
+            return np.nan
+
+        # Clip r away from ±1 to avoid numerical blowups
+        eps = 1e-12
+        r = float(np.clip(r, -1 + eps, 1 - eps))
+
         z = 0.5 * np.log((1 + r) / (1 - r))
-        test_stat = np.sqrt(df.shape[0] - len(self.cond_list) - 3) * abs(z)
+        test_stat = np.sqrt(n_eff) * abs(z)
         pval = 2 * (1 - norm.cdf(abs(test_stat)))
-        return pval
+        return float(pval)
 
 
-class Gsq(CiTests):
+class GsqTest(CiTests, Gsq):
     """
     Discrete conditional independence test using the G² likelihood-ratio test.
     Reference: Spirtes et al., "Causation, Prediction, and Search".
@@ -202,49 +212,6 @@ class Gsq(CiTests):
 
     def __init__(self, x, y, cond_list=None, drop_na=False):
         super().__init__(x, y, cond_list, drop_na)
-
-    def _contingency_table(self, df):
-        """
-        Compute the joint frequency table for X, Y given Z.
-        Returns a dictionary mapping conditioning states to 2D contingency arrays.
-        """
-        if not self.cond_list:
-            # No conditioning: simple 2D table
-            table = pd.crosstab(df[self.x], df[self.y])
-            return {(): table.values}
-        else:
-            # Group by conditioning variables
-            grouped = df.groupby(self.cond_list)
-            tables = {}
-            for cond_values, sub_df in grouped:
-                table = pd.crosstab(sub_df[self.x], sub_df[self.y])
-                tables[cond_values] = table.values
-            return tables
-
-    def get_dependence(self, df):
-        """
-        Returns the G² statistic safely without runtime warnings.
-        """
-        df = self._prepare_data(df)
-        tables = self._contingency_table(df)
-        g2_stat = 0
-
-        for table in tables.values():
-            if table.size == 0:
-                continue
-            n = np.sum(table)
-            row_sums = np.sum(table, axis=1)
-            col_sums = np.sum(table, axis=0)
-            expected = np.outer(row_sums, col_sums) / n
-
-            # Only consider nonzero expected counts
-            mask = expected > 0
-            with np.errstate(divide='ignore', invalid='ignore'):
-                contrib = 2 * table[mask] * np.log(table[mask] / expected[mask])
-                contrib = np.nan_to_num(contrib)  # convert nan/inf to 0
-            g2_stat += np.sum(contrib)
-
-        return g2_stat
 
     def get_pvalue(self, df):
         """
@@ -254,26 +221,59 @@ class Gsq(CiTests):
         df = self._prepare_data(df)
         tables = self._contingency_table(df)
         g2_stat = self.get_dependence(df)
-        # Compute df
+        # Compute degrees of freedom
         df_total = 0
         for table in tables.values():
             r, c = table.shape
             df_total += (r - 1) * (c - 1)
-        pval = 1 - chi2.cdf(g2_stat, df_total)
-        return pval
 
-### MISSING DATA, TEST WISE DELETION
-# class TWDFisherZ(CiTests):
-#     def __init__(self, x, y, cond_list=None):
-#         super().__init__(x, y, cond_list)
-#         self._fisherz = FisherZ(self.x, self.y, self.cond_list)
-#     def get_dependence(self, df):
-#         df_clean = df.dropna(subset=[self.x, self.y] + self.cond_list)
-#         if df_clean.shape[0] < len(self.cond_list) + 3:
-#             return np.nan
-#         return self._fisherz.get_dependence(df_clean)
-#     def get_pvalue(self, df):
-#         df_clean = df.dropna(subset=[self.x, self.y] + self.cond_list)
-#         if df_clean.shape[0] < len(self.cond_list) + 3:
-#             return np.nan
-#         return self._fisherz.get_pvalue(df_clean)
+        if df_total <= 0 or not np.isfinite(g2_stat):
+            return np.nan
+
+        pval = 1 - chi2.cdf(g2_stat, df_total)
+        return float(pval)
+
+
+class KernelPartialCorrelationTest(CiTests, KernelPartialCorrelation):
+    """
+    Kernel-based conditional independence test using the Hilbert-Schmidt Independence Criterion (HSIC).
+    Suitable for nonlinear relationships and mixed data types. Uses permutation testing for p-value estimation.
+    Reference: Zhang et al., "Kernel-based Conditional Independence Test and Application in Causal Discovery".
+    """
+
+    def __init__(self, x, y, cond_list=None, drop_na=False):
+        super().__init__(x, y, cond_list, drop_na)
+
+    def get_pvalue(self, df, n_permutations: int = 1000, seed: int = None):
+        """Estimate a permutation p-value for the CMIh statistic using the
+        generic permutation method implemented in `get_pvalue_by_permutation`.
+
+        Note: this can be expensive; choose n_permutations accordingly.
+        """
+        # Delegate to the generic permutation-based p-value estimator
+        raise NotImplementedError("CMIhTest relies on get_pvalue_by_permutation for p-value estimation. Call that method directly.")
+
+
+class CIMhTest(CiTests, CMIh):
+    """
+    Conditional independence test based on the Maximal Information Coefficient (MIC).
+    Suitable for continuous data. Uses permutation testing for p-value estimation.
+    Reference: Reshef et al., "Detecting Novel Associations in Large Data Sets".
+    """
+
+    def __init__(self, x, y, cond_list=None, drop_na=False):
+        super().__init__(x, y, cond_list, drop_na)
+
+    # def get_dependence(self, df):
+    #     dep = CMIh(self.x, self.y, self.cond_list, self.drop_na)
+    #     res = dep.get_dependence(df)
+    #     return res
+
+    def get_pvalue(self, df, n_permutations: int = 1000, seed: int = None):
+        """Estimate a permutation p-value for the CMIh statistic using the
+        generic permutation method implemented in `get_pvalue_by_permutation`.
+
+        Note: this can be expensive; choose n_permutations accordingly.
+        """
+        # Delegate to the generic permutation-based p-value estimator
+        raise NotImplementedError("CMIhTest relies on get_pvalue_by_permutation for p-value estimation. Call that method directly.")

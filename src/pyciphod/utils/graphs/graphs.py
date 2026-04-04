@@ -1,7 +1,8 @@
 import networkx as nx
 import matplotlib.pyplot as plt
 import numpy as np 
-from typing import Type, Optional
+from typing import Type, Optional, Set, Tuple, Iterable, FrozenSet
+from itertools import combinations, product
 
 
 class Graph:
@@ -19,9 +20,9 @@ class Graph:
         self._undirected_g.nodes = self._g.nodes
         self._uncertain_g.nodes = self._g.nodes
 
-
         self._list_certain_edge_types = ['<->', '->', '-']
-        self._list_uncertain_edge_types = ['*-o', '*->', '*-', '--', '-->', '-||']
+        self._list_uncertain_edge_types = ['o-o', 'o->', 'o-', '--', '-->', '-||']
+        self.list_pointed_edge_types = ['<->', '->', 'o->', '-->']
 
     def add_vertex(self, vertex: str) -> None:
         if vertex not in self._g.nodes:
@@ -123,12 +124,12 @@ class Graph:
             if self._g.has_edge(vertex_j, vertex_i, key=edge_type):
                 self._g.remove_edge(vertex_j, vertex_i, key=edge_type)
 
-    def update_uncertain_edge(self, vertex_i, vertex_j, edge_type='*-o') -> None:
-        assert edge_type in self._list_uncertain_edge_types
-        self._uncertain_g.add_edge(vertex_i, vertex_j, type=edge_type)
-        for edge_type in self._list_uncertain_edge_types:
-            self._g.remove_edge(vertex_i, vertex_j, key=edge_type)
-        self._g.add_edge(vertex_j, vertex_i, key=edge_type)
+    # def update_uncertain_edge(self, vertex_i, vertex_j, edge_type='*-o') -> None:
+    #     assert edge_type in self._list_uncertain_edge_types
+    #     self._uncertain_g.add_edge(vertex_i, vertex_j, type=edge_type)
+    #     for edge_type in self._list_uncertain_edge_types:
+    #         self._g.remove_edge(vertex_i, vertex_j, key=edge_type)
+    #     self._g.add_edge(vertex_j, vertex_i, key=edge_type)
 
     def uncertain_to_certain_edge(self, vertex_i: str, vertex_j: str, edge_type="->") -> None:
         assert edge_type in self._list_certain_edge_types
@@ -138,6 +139,111 @@ class Graph:
         elif edge_type == "<->":
             self.add_confounded_edge(vertex_i, vertex_j)
         self._g.add_edge(vertex_j, vertex_i, key=edge_type)
+
+    def remove_ongoing_edges(self, vertices) -> None:
+        for vertex_j in vertices:
+            for vertex_i in self.get_parents(vertex_j):
+                self.remove_directed_edge(vertex_i, vertex_j)
+            for vertex_i in self.get_confounded_adjacencies(vertex_j):
+                self.remove_confounded_edge(vertex_i, vertex_j)
+                self.remove_confounded_edge(vertex_j, vertex_i)
+
+    def remove_outgoing_edges(self, vertices) -> None:
+        for vertex_i in vertices:
+            for vertex_j in self.get_children(vertex_i):
+                self.remove_directed_edge(vertex_i, vertex_j)
+            for vertex_j in self.get_confounded_adjacencies(vertex_i):
+                self.remove_confounded_edge(vertex_i, vertex_j)
+                self.remove_confounded_edge(vertex_j, vertex_i)
+
+    def is_pointed_edge(self, vertex_i: str, vertex_j: str) -> bool:
+        try:
+            edge_types = self.get_edge_types(vertex_i, vertex_j)
+        except Exception:
+            # if no edge data available, assume no pointing
+            edge_types = set()
+
+        # If any of the edge types corresponds to an arrow into dst, return True
+        for et in edge_types:
+            if et in self.list_pointed_edge_types:
+                return True
+        return False
+
+    def is_adjacent(self, vertex_i: str, vertex_j: str) -> bool:
+        """True if there is any adjacency between u and v (directed, confounded, undirected, uncertain)."""
+        return vertex_i in self.get_adjacencies(vertex_j)
+
+    def is_active_path(self,path: list, adjustment_set: set = None) -> bool:
+        """
+        Reproduit la logique de `is_active` utilisée dans les routines SCG, mais en travaillant directement
+        sur l'objet `Graph` du projet (sans construire un `sg` séparé).
+        La logique est adaptée de `causal_reasoning.cluster_graph.scg.micro_queries.direct_effect.is_active`.
+        """
+        if adjustment_set is None:
+            adjustment_set = set()
+
+        colliders = set()
+        has_seen_right_arrow = False
+        for i in range(len(path) - 1):
+            a = path[i]
+            b = path[i + 1]
+            # check connectivity and direction
+            a_to_b = self.is_pointed_edge(a, b)
+            b_to_a = self.is_pointed_edge(b, a)
+            if a_to_b and b_to_a:
+                # bidirectional (treat like <->)
+                pass
+            elif a_to_b and not b_to_a:
+                # a -> b
+                if (i > 0) and (path[i] in adjustment_set):
+                    return False
+                has_seen_right_arrow = True
+            elif (not a_to_b) and b_to_a:
+                # a <- b
+                if has_seen_right_arrow:
+                    colliders.add(path[i])
+                    has_seen_right_arrow = False
+            else:
+                # no directed arrow either way; check if there is an adjacency (undirected/uncertain without arrows)
+                if self.is_adjacent(a, b):
+                    # treat as non-collider segment: if the middle node is in adjustment_set, path is blocked
+                    if (i > 0) and (path[i] in adjustment_set):
+                        return False
+                    # non-collider resets seen-right-arrow
+                    has_seen_right_arrow = False
+                    continue
+                # not connected at all
+                raise ValueError("Path is not a path in graph: {} and {} are not connected.".format(a, b))
+        # For each collider, at least one descendant is in adjustment_set (or collider itself)
+        for c in colliders:
+            if c in adjustment_set:
+                continue
+            for d in self.get_descendants(c):
+                if d in adjustment_set:
+                    break
+            else:
+                return False
+        return True
+
+    def is_acyclic(self):
+        return nx.is_directed_acyclic_graph(self._directed_g)
+
+    # def _has_directed_edge(self, vertex_i: str, vertex_i: str) -> bool:
+    #     """True if there is a definite or uncertain arrow u->v in the graph's representation."""
+    #     # check directed edges
+    #     if (vertex_i, vertex_i) in self.get_directed_edges():
+    #         return True
+    #     # check multigraph edge types
+    #     try:
+    #         types = graph.get_edge_types(u, v)
+    #     except Exception:
+    #         types = set()
+    #     for t in types:
+    #         if isinstance(t, str) and (t in {"->", "*->", "-->"} or t.endswith('>')):
+    #             return True
+    #         if t == '<->':
+    #             return True
+    #     return False
 
     def get_edges(self):
         return set(self._g.edges(keys=True))
@@ -159,9 +265,6 @@ class Graph:
 
     def get_edge_types(self, vertex_i: str, vertex_j: str):
         return set(list(self._g.get_edge_data(vertex_i, vertex_j).keys()))
-
-    def is_acyclic(self):
-        return nx.is_directed_acyclic_graph(self._directed_g)
 
     def get_parents(self, vertex: str) -> set:
         """
@@ -279,17 +382,235 @@ class Graph:
         #                 confounded_adjacencies.append(potential_adj)
         # return confounded_adjacencies
 
-    def all_paths(self, vertex_i: str, vertex_j: str):
+    # def all_paths(self, vertex_i: str, vertex_j: str):
+    #     # TODO
+    #     1
+
+    def get_simple_paths(self, vertex_i: str, vertex_j: str, allowed_nodes: Iterable[str] = None,
+                                cutoff: int = 10):
+        """
+        Générateur de chemins simples entre source et target en se basant uniquement sur `get_adjacencies`.
+        Evite la création d'un nouveau graphe en itérant récursivement sur les voisins.
+        """
+        allowed = None if allowed_nodes is None else set(allowed_nodes)
+
+        if allowed is not None and (vertex_i not in allowed or vertex_j not in allowed):
+            return
+
+        visited = [vertex_i]
+
+        def dfs(current):
+            if len(visited) > cutoff:
+                return
+            if current == vertex_j:
+                yield list(visited)
+                return
+            # neighbors via adjacencies
+            neighs = self.get_adjacencies(current)
+            if allowed is not None:
+                neighs = neighs & allowed
+            for n in neighs:
+                if n in visited:
+                    continue
+                visited.append(n)
+                for p in dfs(n):
+                    yield p
+                visited.pop()
+
+        for p in dfs(vertex_i):
+            yield p
+
+    def get_active_paths(self, vertex_i: str, vertex_j: str, allowed_nodes: Iterable[str] = None,
+                            max_path_length: int = 10):
+        """
+        Recherche s'il existe un chemin actif entre u et v dans `graph` sans construire un `sg` séparé.
+        """
+        p = []
+        try:
+            for path in self.get_all_simple_paths(vertex_i, vertex_j, allowed_nodes=allowed_nodes, cutoff=max_path_length):
+                if self.is_active_path(path, adjustment_set=set()):
+                    p.append(path)
+        except ValueError:
+            return p
+        return p
+
+    def get_confounded_paths(self, vertex_i: str, vertex_j: str):
         # TODO
         1
 
-    def all_confounded_paths(self, vertex_i: str, vertex_j: str):
+    def get_all_counfounded_components(self):
         # TODO
         1
 
-    def counfounded_components(self):
-        # TODO
-        1
+    def get_all_colliders(self) -> Set[Tuple[str, str, str]]:
+        colliders = set()
+        vertices = list(self.get_vertices())
+
+        for z in vertices:
+            adj = self.get_adjacencies(z)
+            if len(adj) < 2:
+                continue
+            adj_list = list(adj)
+            n = len(adj_list)
+            for i in range(n):
+                x = adj_list[i]
+                for j in range(i + 1, n):
+                    y = adj_list[j]
+                    # Now check if edges point towards z from x and y
+                    x_points = self.is_pointed_edge(x, z)
+                    y_points = self.is_pointed_edge(y, z)
+                    if x_points and y_points:
+                        a, b = (x, y) if x <= y else (y, x)
+                        colliders.add((a, z, b))
+        return colliders
+
+    def get_all_unshielded_colliders(self) -> Set[Tuple[str, str, str]]:
+        all_colliders = self.get_all_colliders()
+        unshielded = set()
+        for (x, z, y) in all_colliders:
+            # x and y are not adjacent
+            if y not in self.get_adjacencies(x):
+                unshielded.add((x, z, y))
+        return unshielded
+
+    def _all_nonempty_subsets(self, iterable: Iterable[str]):
+        s = list(iterable)
+        for r in range(1, len(s) + 1):
+            for comb in combinations(s, r):
+                yield frozenset(comb)
+
+    def get_all_cluster_super_unshielded_colliders(self, max_vertices_for_search: int = 12,
+                                               max_path_length: int = 8) -> Set[
+        Tuple[FrozenSet[str], FrozenSet[str], FrozenSet[str]]]:
+        """
+        Retourne l'ensemble des clustered super-unshielded colliders (CSUC) du graphe `graph`.
+
+        Implémentation exhaustive utilisant uniquement les méthodes/attributs du `Graph` fourni.
+        """
+        vertices = list(self.get_vertices())
+        n = len(vertices)
+        if n == 0:
+            return set()
+        if n > max_vertices_for_search:
+            raise ValueError(
+                f"Graph too large for exhaustive CSUC search (|V|={n}). Increase max_vertices_for_search with caution.")
+
+        # Precompute active_any between all pairs (unrestricted)
+        active_any = {}
+        for u, v in product(vertices, repeat=2):
+            if u == v:
+                active_any[(u, v)] = False
+            else:
+                test = len(self.get_active_paths(u, v, allowed_nodes=None, max_path_length=max_path_length))>0
+                active_any[(u, v)] = test
+
+        candidates = set()
+        Vset = set(vertices)
+
+        # enumerate Y (non-empty)
+        for Y in self._all_nonempty_subsets(vertices):
+            outside = Vset - Y
+            if not outside:
+                continue
+            # enumerate X as non-empty subset of outside
+            for X in self._all_nonempty_subsets(outside):
+                rest = outside - X
+                if not rest:
+                    continue
+                # enumerate Z as non-empty subset of rest
+                for Z in self._all_nonempty_subsets(rest):
+                    # ensure disjointness by construction
+                    if X & Y or Y & Z or X & Z:
+                        continue
+                    # Check separation across sides: no active path between any x in X and z in Z
+                    separated = True
+                    for x in X:
+                        for z in Z:
+                            if active_any.get((x, z), False) or active_any.get((z, x), False):
+                                separated = False
+                                break
+                        if not separated:
+                            break
+                    if not separated:
+                        continue
+                    # Connection to the middle: for each x in X and y in Y exists active path within X∪Y
+                    XY_allowed = X | Y
+                    XY_ok = True
+                    for x in X:
+                        for y in Y:
+                            test = len(self.get_active_paths(x, y, allowed_nodes=XY_allowed, max_path_length=max_path_length)) > 0
+                            if not test:
+                                XY_ok = False
+                                break
+                        if not XY_ok:
+                            break
+                    if not XY_ok:
+                        continue
+                    # Similarly for ZY
+                    ZY_allowed = Z | Y
+                    ZY_ok = True
+                    for z in Z:
+                        for y in Y:
+                            test = len(self.get_active_paths(z, y, allowed_nodes=ZY_allowed, max_path_length=max_path_length)) > 0
+                            if not test:
+                                ZY_ok = False
+                                break
+                        if not ZY_ok:
+                            break
+                    if not ZY_ok:
+                        continue
+                    # At this point (X,Y,Z) satisfy (1)-(2)
+                    candidates.add((frozenset(X), frozenset(Y), frozenset(Z)))
+
+        # Filter maximal triplets (no strict superset in candidates)
+        maximal = set()
+        for trip in candidates:
+            X, Y, Z = trip
+            is_max = True
+            for other in candidates:
+                if other == trip:
+                    continue
+                X2, Y2, Z2 = other
+                if X <= X2 and Y <= Y2 and Z <= Z2 and (X < X2 or Y < Y2 or Z < Z2):
+                    is_max = False
+                    break
+            if is_max:
+                maximal.add(trip)
+
+        return maximal
+
+    def get_all_simple_cycles(self):
+        return list(nx.simple_cycles(self._directed_g))
+
+    def get_simple_cycles(self, vertex: str):
+        # cyc_list = []
+        # for cyc in self.get_all_simple_cycles():
+        #     if vertex in cyc:
+        #         cyc_list.append(cyc)
+        cycles = self.get_all_simple_cycles()
+        nodes_in_cycles = set()
+        for cyc in cycles:
+            nodes_in_cycles.update(cyc)
+        # Also return the subset related to y: if y in cycle include the cycle nodes
+        related = set()
+        for cyc in cycles:
+            if vertex in cyc:
+                for i in range(len(cyc)):
+                    a = cyc[i]
+                    b = cyc[(i + 1) % len(cyc)]
+                    related.add((a, b))
+        if related:
+            return related
+        return nodes_in_cycles
+
+    def get_all_strongly_connected_components(self):
+        return list(nx.strongly_connected_components(self._directed_g))
+
+    def get_strongly_connected_components(self, vertex: str):
+        for comp in self.get_all_strongly_connected_components():
+            if vertex in comp:
+                return set(comp)
+        return set()
 
     def draw_graph(self, treatment: set = None, outcome: set = None):
         vertex_color = "lightblue"
