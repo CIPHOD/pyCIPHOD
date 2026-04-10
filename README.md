@@ -10,7 +10,7 @@
 
 ## Introduction
 
-PyCIPHOD is a robust and versatile Python package developed and maintained by the CIPHOD team at the Pierre Louis Institute of Epidemiology and Public Health, INSERM, Sorbonne University. It is designed to empower epidemiologists and practitioners to uncover and understand intricate causal mechanisms in their data. Py-CIPHOD offers a comprehensive suite of methods for causal inference, including causal discovery, causal reasoning, and root cause analysis, and is suited for both fully specified and partially specified graphs. It effectively handles temporal data, such as time series or cohort data, addressing the evolving needs of epidemiologists.
+PyCIPHOD is a robust and versatile Python package developed and maintained by the CIPHOD team at the Pierre Louis Institute of Epidemiology and Public Health, INSERM, Sorbonne University. It is designed to empower epidemiologists and practitioners to uncover and understand intricate causal mechanisms in their data. PyCIPHOD offers a comprehensive suite of methods for causal inference, including causal discovery, causal reasoning, and root cause analysis, and is suited for both fully specified and partially specified graphs. It effectively handles temporal data, such as time series or cohort data, addressing the evolving needs of epidemiologists.
 
 
 

@@ -1,12 +1,14 @@
 import networkx as nx
 import pandas as pd
 import numpy as np
-from identification import remove_self_loops, adjutment_set_for_direct_effect_in_ascgl_using_parentsY
-from estimation import grubb_test, LinearRegression
+from causal_reasoning.summary_causal_graph.micro_queries import adjutment_set_for_direct_effect_in_ascgl_using_parentsY
+from utils.stat_tests.dependency_measures import LinearRegressionCoefficient
+from utils.stat_tests.dependency_measures import grubb_test
+from utils.graphs.partially_specified_graphs import SummaryCausalGraph
 
 
 class EasyRCA:
-    def __init__(self, summary_graph, anomalous_nodes, anomalies_start_time=None, anomaly_length=200, gamma_max=1,
+    def __init__(self, summary_graph:SummaryCausalGraph, anomalous_nodes, anomalies_start_time=None, anomaly_length=200, gamma_max=1,
                  sig_threshold=0.05):
         # TODO add a parameter distinguish_anomaly_type which chooses between one of the strategies for when to distinguish between structural and parametric:
         # always, except_subroots, except_time_defying, except_subroots_and_time_defying, never.
@@ -18,8 +20,15 @@ class EasyRCA:
         :param anomalies_start_time: dict
         """
         # test if summary graph is acyclic without self loops
-        dag = remove_self_loops(summary_graph)
-        if not nx.is_directed_acyclic_graph(dag):
+        dag = summary_graph.copy()
+        for node in summary_graph.get_vetrices():
+            if node in dag.get_adjacencies(node):
+                dag.remove_directed_edge(node, node)
+        for node in summary_graph.get_vetrices():
+            if node in dag.get_adjacencies(node):
+                print("Summary causal graph has self loops, please remove them before using EasyRCA")
+                exit(0)
+        if not dag.is_acyclic():
             print("Summary causal graph is not acylic if self loops are omited")
             exit(0)
 
@@ -252,7 +261,7 @@ class EasyRCA:
                         # cond_set = cond_dict[gamma] + cond_dict2[gamma]
                         yt = self.nodes_to_temporal_nodes[y][0]
                         xt = self.nodes_to_temporal_nodes[x][gamma]
-                        ci = LinearRegression(xt, yt, cond_set)
+                        ci = LinearRegressionCoefficient(xt, yt, cond_set)
                         pval_normal = ci.test_zeo_coef(normal_data)
                         pval_anomalous = ci.test_zeo_coef(anomalous_data)
                         if (pval_anomalous >= self.sig_threshold) and (pval_normal < self.sig_threshold):
@@ -304,7 +313,7 @@ class EasyRCA:
                     xt = self.nodes_to_temporal_nodes[x][gamma]
                     # ci = FisherZ(xt, yt, cond_set)
                     print(xt, yt, cond_set)
-                    ci = LinearRegression(xt, yt, cond_set)
+                    ci = LinearRegressionCoefficient(xt, yt, cond_set)
                     pval_normal = ci.test_zeo_coef(normal_data)
                     if (pval_normal < self.sig_threshold):
                         coeff_anomalous = ci.get_coeff(anomalous_data)

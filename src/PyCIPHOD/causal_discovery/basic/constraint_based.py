@@ -4,8 +4,9 @@ import pandas as pd
 from itertools import combinations
 
 from pyciphod.utils.graphs.partially_specified_graphs import CompletedPartiallyDirectedAcyclicGraph
+from pyciphod.utils.graphs.meek_rules import meek_rule_1, meek_rule_2, meek_rule_3
 from pyciphod.utils.stat_tests.independence_tests import CiTests, FisherZTest as FisherZ
-from pyciphod.utils.background_knowledge.background_knowledge import BackgroundKnowledge
+from pyciphod.utils.graphs.background_knowledge import BackgroundKnowledge
 
 
 class ConstraintBased(ABC):
@@ -153,45 +154,6 @@ class PC(ConstraintBased):
                         self.g_hat.remove_undirected_edge(y, z)
                         self.g_hat.add_directed_edges_from([(x, y), (z, y)])
 
-    def _meek_rule_1(self, X, Y, Z):
-        """
-        :param X: a vertex in g
-        :param Y:  a vertex in g
-        :param Z:  a vertex in g
-        :return:  True if the conditions of Meek's Rule 1 are satisfied for the triple (X, Y, Z) in g, False otherwise.
-         Meek's Rule 1 states that if there is a directed edge from X to Y (X -> Y) and an undirected edge between Y and Z (Y - Z), and there is no edge between X and Z (X and Z are not adjacent), then we can orient the edge between Y and Z as Y -> Z.
-        """
-        if (X, Y) in self.g_hat.get_directed_edges() and (Y, Z) in self.g_hat.get_undirected_edges() and Z not in self.g_hat.get_adjacencies(X):
-            return True
-        return False
-
-    def _meek_rule_2(self, X, Y, Z):
-        """
-        :param X: a vertex in g
-        :param Y:  a vertex in g
-        :param Z:  a vertex in g
-        :return:  True if the conditions of Meek's Rule 2 are satisfied for the triple (X, Y, Z) in g, False otherwise.
-         Meek's Rule 2 states that if there is a directed edge from X to Y (X -> Y) and a directed edge from Y to Z (Y -> Z), and there is an undirected edge between X and Z (X - Z), then we can orient the edge between X and Z as X -> Z.
-        """
-        if (X, Y) in self.g_hat.get_directed_edges() and (Y, Z) in self.g_hat.get_directed_edges() and (X, Z) in self.g_hat.get_undirected_edges():
-            return True
-        return False
-
-    def _meek_rule_3(self, X, Y, Z, W):
-        """
-        :param g: a pattern of a CPDAG
-        :param X: a vertex in g
-        :param Y:  a vertex in g
-        :param Z:  a vertex in g
-        :return:  True if the conditions of Meek's Rule 3 are satisfied for the triple (X, Y, Z) and vertex W in g, False otherwise.
-         Meek's Rule 3 states that if there is a directed edge from X to Y (X -> Y) and a directed edge from Z to Y (Z -> Y), and there is an undirected edge between X and Z (X - Z), and there exists a vertex W such that there are undirected edges between W and Y (W - Y), W and X (W - X), and W and Z (W - Z), then we can orient the edge between X and Z as X -> Z.
-        """
-        if (X, Y) in self.g_hat.get_directed_edges() and (Z, Y) in self.g_hat.get_directed_edges() and Z not in self.g_hat.get_adjacencies(X):
-            if (W, Y) in self.g_hat.get_undirected_edges() and (W, X) in self.g_hat.get_undirected_edges() and (
-            W, Z) in self.g_hat.get_undirected_edges():
-                return True
-        return False
-
     def _apply_meek_rules(self):
         """
         Apply Meek's orientation rules iteratively using only edge sets:
@@ -206,14 +168,14 @@ class PC(ConstraintBased):
             for y in sorted(adj[x]):
                 # Rule 1:
                 for z in sorted(set(adj[y]) - set(adj[x])):
-                    if self._meek_rule_1(x, y, z):
+                    if meek_rule_1(self.g_hat, x, y, z):
                     # if (x,y) in self.g_hat.get_directed_edges() and (y,z) in self.g_hat.get_undirected_edges():
                         changed = True
                         self.g_hat.remove_undirected_edge(z, y)
                         self.g_hat.add_directed_edge(y, z)
                 # Rule 2:
                 for z in sorted(set(adj[y]) & set(adj[x])):
-                    if self._meek_rule_2(x, y, z):
+                    if meek_rule_2(self.g_hat, x, y, z):
                     # if (x,y) in self.g_hat.get_directed_edges() and (y,z) in self.g_hat.get_directed_edges() and (x,z) in self.g_hat.get_undirected_edges():
                         changed = True
                         self.g_hat.remove_undirected_edge(x, z)
@@ -228,7 +190,7 @@ class PC(ConstraintBased):
                     if (z, y) not in self.g_hat.get_directed_edges():
                         continue
                     for w in sorted(set(adj[x]) & set(adj[y]) & set(adj[z])):
-                        if self._meek_rule_3(x, y, z, w):
+                        if meek_rule_3(self.g_hat, x, y, z, w):
                         # undirected_triplet = [(w, y), (w, x), (z, w)]
                         # if all(edge in self.g_hat.get_undirected_edges() for edge in undirected_triplet):
                             changed = True

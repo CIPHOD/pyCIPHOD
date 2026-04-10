@@ -1,11 +1,30 @@
 import pytest
 
+from pyciphod.causal_reasoning.basic.criteria import back_door_criterion, front_door_criterion
 from pyciphod.causal_reasoning.basic.do_calculus import (
     rule1_applies,
     rule2_applies,
     rule3_applies,
 )
 from pyciphod.utils.graphs.graphs import DirectedMixedGraph
+
+
+def test_rule1_backdoor():
+    g = DirectedMixedGraph()
+    g.add_vertex('X')
+    g.add_vertex('Y')
+    g.add_vertex('Z')
+    g.add_vertex('W')
+    g.add_directed_edge('X', 'Y')
+    g.add_directed_edge('W', 'X')
+    g.add_directed_edge('Z', 'Y')
+    g.add_directed_edge('W', 'Z')
+
+    assert back_door_criterion(g, X={'X'}, Y={'Y'},  Z={'Z', 'W'}) is True
+
+
+# def test_rule1_frontdoor():
+#     1
 
 
 def test_rule1_simple_disconnected_Z():
@@ -16,7 +35,7 @@ def test_rule1_simple_disconnected_Z():
     g.add_vertex('Z')
     g.add_directed_edge('X', 'Y')
 
-    assert rule1_applies(g, X='X', Y='Y', Z='Z') is True
+    assert rule1_applies(g, Y='Y', X='X', Z='Z') is True
 
 
 def test_rule1_negative_connected_Z():
@@ -26,7 +45,7 @@ def test_rule1_negative_connected_Z():
     g.add_directed_edge('X', 'Y')
     g.add_directed_edge('Z', 'Y')
 
-    assert rule1_applies(g, X='X', Y='Y', Z='Z') is False
+    assert rule1_applies(g, Y='X', X={}, Z='Z',  W='Y') is False
 
 
 def test_rule2_simple_remove_outgoing():
@@ -37,17 +56,17 @@ def test_rule2_simple_remove_outgoing():
     g.add_directed_edge('Z', 'X')
     g.add_directed_edge('X', 'Y')
 
-    assert rule2_applies(g, X='X', Y='Y', Z='Z') is True
+    assert rule2_applies(g, Y='Y',X='X', Z='Z') is True
 
 
 def test_rule2_negative_when_path_remains():
-    # Graph: Z -> Y, X -> Y. Removing outgoing from Z doesn't remove Z->Y, so dependency remains -> rule2 false
+    # Graph: X -> Y -> Z. Removing outgoing from Z doesn't remove Y->Z, so dependency remains -> rule2 false
     g = DirectedMixedGraph()
     g.add_vertices(['X', 'Y', 'Z'])
     g.add_directed_edge('X', 'Y')
-    g.add_directed_edge('Z', 'Y')
+    g.add_directed_edge('Y', 'Z')
 
-    assert rule2_applies(g, X='X', Y='Y', Z='Z') is False
+    assert rule2_applies(g, Y='Y', X='X',  Z='Z') is False
 
 
 def test_rule3_simple_true():

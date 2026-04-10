@@ -69,7 +69,7 @@ class DifferenceConstraintBased(ABC):
         self._orientation()
 
 
-class DifferencePC(DifferenceConstraintBased):
+class LinearDifferencePC(DifferenceConstraintBased):
     """
     Difference analogue of the PC algorithm: learns a
     CompletedPartiallyDirectedAcyclicDifferenceGraph using equality tests

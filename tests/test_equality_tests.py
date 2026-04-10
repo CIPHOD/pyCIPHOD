@@ -7,7 +7,6 @@ from pyciphod.utils.stat_tests.equality_tests import (
     GsqEqualityTest,
     LinearRegressionCoefficientEqualityTest,
     KernelPartialCorrelationEqualityTest,
-    SlearnerEqualityTest,
     GComputationEqualityTest,
 )
 

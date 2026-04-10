@@ -6,8 +6,9 @@ from itertools import combinations
 from pyciphod.causal_discovery.basic.constraint_based import ConstraintBased
 from pyciphod.causal_discovery.basic.constraint_based import PC
 from pyciphod.utils.graphs.partially_specified_graphs import LocalEssentialGraph
+from pyciphod.utils.graphs.meek_rules import meek_rule_1, meek_rule_2, meek_rule_3
 from pyciphod.utils.stat_tests.independence_tests import CiTests, FisherZTest as FisherZ
-from pyciphod.utils.background_knowledge.background_knowledge import BackgroundKnowledge
+from pyciphod.utils.graphs.background_knowledge import BackgroundKnowledge
 
 
 class LocalConstraintBased:
@@ -177,7 +178,7 @@ class LocPC(LocalConstraintBased):
                         self.g_hat.add_directed_edges_from([(x, y), (z, y)])
 
 
-    def _meek_rules(self):
+    def _apply_meek_rules(self):
         nodes = self.g_hat.get_vertices()
         changed = False
         adj = {x: self.g_hat.get_adjacencies(x) for x in nodes}
@@ -242,7 +243,7 @@ class LocPC(LocalConstraintBased):
         self._uc_rule()
         repeat = True
         while repeat:
-            repeat = self._meek_rules()
+            repeat = self._apply_meek_rules()
         self._nnc_rule()
         
     def run(self, data, hop: int = 0):

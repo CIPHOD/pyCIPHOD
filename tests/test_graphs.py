@@ -1,7 +1,9 @@
 import pytest
 
 from pyciphod.utils.graphs.graphs import Graph, AcyclicDirectedMixedGraph, DirectedAcyclicGraph, create_random_admg, create_random_dag
-from pyciphod.utils.graphs.d_separation import d_separated
+from pyciphod.utils.graphs.separation import d_separated, m_separated
+from pyciphod.utils.graphs.partially_specified_graphs import CompletedPartiallyDirectedAcyclicDifferenceGraph
+from pyciphod.utils.graphs.background_knowledge import BackgroundKnowledge
 
 
 @pytest.fixture
@@ -170,6 +172,63 @@ def test_create_random_admg_and_dag_have_vertices_and_no_directed_cycles():
 
 
 
+
+def test_construct_from_dag_v_structure():
+    # DAG: A -> C <- B  (v-structure)
+    dag = DirectedAcyclicGraph()
+    for n in ['A', 'B', 'C']:
+        dag.add_vertex(n)
+    dag.add_directed_edge('A', 'C')
+    dag.add_directed_edge('B', 'C')
+
+    cpdag = CompletedPartiallyDirectedAcyclicDifferenceGraph()
+    cpdag.construct_from_dag(dag)
+
+    directed = set(cpdag.get_directed_edges())
+    undirected = set(cpdag.get_undirected_edges())
+
+    # Expect A->C and B->C oriented
+    assert ('A', 'C') in directed
+    assert ('B', 'C') in directed
+    # A and B should not be adjacent
+    assert 'B' not in cpdag.get_adjacencies('A')
+
+
+def test_construct_from_dag_chain_remains_undirected():
+    # DAG: A -> B -> C (no collider)
+    dag = DirectedAcyclicGraph()
+    for n in ['A', 'B', 'C']:
+        dag.add_vertex(n)
+    dag.add_directed_edge('A', 'B')
+    dag.add_directed_edge('B', 'C')
+
+    cpdag = CompletedPartiallyDirectedAcyclicDifferenceGraph()
+    cpdag.construct_from_dag(dag)
+
+    # In this implementation the chain edges remain undirected in the CPDAG
+    undirected = set(cpdag.get_undirected_edges())
+    directed = set(cpdag.get_directed_edges())
+
+    assert ('A', 'B') in undirected or ('B', 'A') in undirected
+    assert ('B', 'C') in undirected or ('C', 'B') in undirected
+    # No directed edges should be present for these pairs
+    assert ('A', 'B') not in directed and ('B', 'A') not in directed
+    assert ('B', 'C') not in directed and ('C', 'B') not in directed
+
+
+def test_construct_from_dag_preserves_vertices():
+    dag = DirectedAcyclicGraph()
+    for n in ['X', 'Y', 'Z']:
+        dag.add_vertex(n)
+    dag.add_directed_edge('X', 'Y')
+
+    cpdag = CompletedPartiallyDirectedAcyclicDifferenceGraph()
+    cpdag.construct_from_dag(dag)
+
+    assert set(cpdag.get_vertices()) == set(dag.get_vertices())
+
+
+
 def test_chain_and_collider():
     # Chain: A -> B -> C, A and C are d-separated given B
     g = Graph()
@@ -249,3 +308,83 @@ def test_long_chain_with_collider_and_conditioning():
     assert not d_separated(g, ['X'], ['Y'], ['N'])
     # Conditioning on both P and N blocks both routes
     assert not d_separated(g, ['X'], ['Y'], ['P', 'N'])
+
+
+def test_m_separation():
+    g = Graph()
+    g.add_vertices(["X", "Y", "Z", "M"])
+    g.add_directed_edge("X", "M")
+    g.add_confounded_edge("M", "Y")
+
+    assert m_separated(g, X=["X"], Y=["Y"]) is True
+    assert m_separated(g, X=["X"], Y=["Y"], Z=["M"]) is False
+
+
+def test_mandatory_and_forbidden_edges_and_orientations():
+    bk = BackgroundKnowledge()
+
+    bk.add_mandatory_edge('A', 'B')
+    bk.add_forbidden_edge('C', 'D')
+    bk.add_mandatory_orientation('E', 'F')
+    bk.add_forbidden_orientation('G', 'H')
+
+    assert ('A', 'B') in bk.get_mandatory_edges()
+    assert ('C', 'D') in bk.get_forbidden_edges()
+    assert ('E', 'F') in bk.get_mandatory_orientations()
+    assert ('G', 'H') in bk.get_forbidden_orientations()
+
+
+def test_add_edges_from_and_orientations_from_and_non_descendants_from():
+    bk = BackgroundKnowledge()
+    bk.add_mandatory_edges_from({('X', 'Y'), ('U', 'V')})
+    bk.add_forbidden_edges_from({('M', 'N')})
+    bk.add_mandatory_orientations_from({('P', 'Q')})
+    bk.add_forbidden_orientations_from({('R', 'S')})
+
+    assert ('X', 'Y') in bk.get_mandatory_edges()
+    assert ('M', 'N') in bk.get_forbidden_edges()
+    assert ('P', 'Q') in bk.get_mandatory_orientations()
+    assert ('R', 'S') in bk.get_forbidden_orientations()
+
+    # non_descendants_from should add forbidden orientations for each nd
+    bk.add_non_descendants_from('Z', {'A', 'B'})
+    nd = bk.get_non_descendants()
+    assert 'Z' in nd
+    assert nd['Z'] == {'A', 'B'}
+    # forbidden orientations should include (A,Z) and (B,Z) per implementation
+    f_or = bk.get_forbidden_orientations()
+    assert ('Z', 'A') in f_or and ('Z', 'B') in f_or
+
+
+def test_add_non_descendant_and_remove():
+    bk = BackgroundKnowledge()
+    bk.add_non_descendant('T', 'S')
+    nd = bk.get_non_descendants()
+    assert 'S' in nd
+    assert 'T' in nd['S']
+
+    # adding non-descendant also adds forbidden orientation (node, non_descendant) in implementation
+    f_or = bk.get_forbidden_orientations()
+    assert ('T', 'S') in f_or
+
+    # remove_non_descendant should remove the mapping and the forbidden orientation
+    bk.remove_non_descendant('S', 'T')
+    nd2 = bk.get_non_descendants()
+    assert 'S' not in nd2 or 'T' not in nd2.get('S', set())
+    # forbidden orientation should no longer include (T,S)
+    assert ('T', 'S') not in bk.get_forbidden_orientations()
+
+
+def test_getters_return_copies():
+    bk = BackgroundKnowledge()
+    bk.add_mandatory_edge('A', 'B')
+    me = bk.get_mandatory_edges()
+    me.add(('X', 'Y'))
+    # original should not be modified
+    assert ('X', 'Y') not in bk.get_mandatory_edges()
+
+    bk.add_non_descendants_from('N', {'L'})
+    nd = bk.get_non_descendants()
+    nd['N'].add('Z')
+    # original non_descendants should not contain 'Z'
+    assert 'Z' not in bk.get_non_descendants().get('N', set())

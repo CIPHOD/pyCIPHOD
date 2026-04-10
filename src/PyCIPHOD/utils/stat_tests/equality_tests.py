@@ -393,8 +393,8 @@ class GComputationEqualityTest(CeTests):
 
     def get_dependence(self, df):
         # Use the GComputation mixin's implementation
-        rf = RandomForestRegressor(n_estimators=100, random_state=self.seed)
-        ce = GComputation(self.x, self.y, z=self.cond_list, w=None, model=rf, seed=self.seed)
+        # rf = RandomForestRegressor(n_estimators=100, random_state=self.seed)
+        ce = GComputation(self.x, self.y, z=self.cond_list, w=None, seed=self.seed)
         result = ce.run(df)
         if isinstance(result, dict) and 'cate' in result:
             return result['cate']

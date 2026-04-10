@@ -1,7 +1,9 @@
 import networkx as nx
 import numpy as np
 import pandas as pd
-from typing import Dict, Iterable, List, Optional, Any, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Any, Tuple, Union, Callable
+from typing import Hashable
+
 
 from pyciphod.utils.graphs.graphs import DirectedAcyclicGraph, AcyclicDirectedMixedGraph
 from pyciphod.utils.graphs.graphs import create_random_dag, create_random_admg
@@ -27,16 +29,16 @@ class SCM:
         If a dict, keys are variable names and values are callables producing noise for that variable.
     """
 
-    def __init__(self, v: Iterable[str], u: Iterable[str], f: Dict[str, Dict[str, Any]], u_dist: Optional[Any] = None):
-        self.v: List[str] = list(v)
-        self.u: List[str] = list(u)
-        self._all_vars: List[str] = self.u + self.v
+    def __init__(self, v: Iterable[Hashable], u: Iterable[Hashable], f: Dict[Hashable, Dict[str, Any]], u_dist: Optional[Any] = None):
+        self.v = list(v)
+        self.u = list(u)
+        self._all_vars= self.u + self.v
         self.f = f or {}
 
         # normalize u_dist into a mapping var -> callable
         if u_dist is None:
             # Use None as sentinel to indicate "use internal rng" in generate_data
-            self._u_dist_map = {name: None for name in self._all_vars}
+            self._u_dist_map = {name: np.random.normal() for name in self._all_vars}
         elif callable(u_dist):
             self._u_dist_map = {name: u_dist for name in self._all_vars}
         elif isinstance(u_dist, dict):
@@ -197,22 +199,23 @@ class SCM:
 class LinearSCM(SCM):
     """A simple Linear SCM helper that accepts a coefficient-based specification."""
 
-    def __init__(self, v: Iterable[str], u: Iterable[str], coefficients: Dict[tuple, float], intercepts: Optional[Dict[str, float]] = None, u_dist: Optional[Any] = None):
+    def __init__(self, v: Iterable[Hashable], u: Iterable[Hashable], coefficients: Dict[tuple, float], intercepts: Optional[Dict[Hashable, float]] = None, u_dist: Optional[Any] = None):
+        super().__init__(v=v, u=u, f=None, u_dist=u_dist)
         # build f from coefficients: for each target, collect incoming parents
         coeffs = coefficients or {}
         intercepts = intercepts or {}
-        all_vars = list(u) + list(v)
+        # all_vars = list(u) + list(v)
 
         # Build parent lists and linear functions
         f = {}
-        parents_map: Dict[str, List[str]] = {var: [] for var in all_vars}
+        parents_map: Dict[Hashable, List[str]] = {var: [] for var in self._all_vars}
         for (src, tgt), w in coeffs.items():
             # Validate coefficients do not create observed -> latent edges
             if src in v and tgt in u:
                 raise ValueError(f"Invalid coefficient specification: observed variable '{src}' cannot be a parent of latent variable '{tgt}'")
             parents_map[tgt].append(src)
 
-        for var in all_vars:
+        for var in self._all_vars:
             parents = parents_map.get(var, [])
             b = float(intercepts.get(var, 0.0))
 
@@ -262,10 +265,10 @@ def create_random_linear_scm_from_admg(admg: AcyclicDirectedMixedGraph,
 
     v= sorted(admg.get_vertices())
     for tgt in v:
-        if tgt not in v_in_conf:
-            src = f"U_{tgt}"
-            coefficients[(src, tgt)] = 1
-            u = u + [src]
+        # if tgt not in v_in_conf:
+        src = f"U_{tgt}"
+        coefficients[(src, tgt)] = 1
+        u = u + [src]
 
     # collect directed edges from the ADMG to assign random weights
     directed_edges = sorted(admg.get_directed_edges())
@@ -298,13 +301,13 @@ def create_random_linear_scm_from_dag(dag: DirectedAcyclicGraph,
 
 def create_random_linear_scm(num_v: int,
                              p_edge: float = 0.2,
+                             unmeasured_confounding: bool = False,
                              weight_low: float = -1.0,
                              weight_high: float = 1.0,
                              intercept_low: float = 0.0,
                              intercept_high: float = 0.0,
-                             unmeasured_confounding: bool = False,
                              u_dist: Optional[Any] = None,
-                             seed: Optional[int] = None):
+                             seed: Optional[int] = None) -> LinearSCM:
     """
     Generate a random acyclic DAG and build a LinearSCM on top of it.
 
@@ -325,8 +328,6 @@ def create_random_linear_scm(num_v: int,
 
     Returns (scm, dag, coefficients, intercepts)
     """
-    rng = np.random.default_rng(seed)
-
     # name variables: U0..U{num_u-1}, X0..X{num_v-1}
     # u = [f"U{i}" for i in range(num_v)]
     if unmeasured_confounding:
@@ -338,10 +339,146 @@ def create_random_linear_scm(num_v: int,
     return scm,  coefficients, intercepts
 
 
+def create_random_additive_scm_from_admg(admg: AcyclicDirectedMixedGraph,
+                                mechanisms: List[Callable],
+                                u_dist: Optional[Any] = None,
+                                seed: Optional[int] = None) -> SCM:
+    """
+    Construct an SCM from a given AcyclicDirectedMixedGraph (ADMG) and a specification of structural functions.
+
+    This will create latent (exogenous) variables for each bidirected/confounded edge in the ADMG
+    by introducing a new latent variable U_{a}_{b} that is a parent of both a and b.
+
+    Parameters
+    ----------
+    admg : AcyclicDirectedMixedGraph
+        The ADMG describing directed relationships and possible bidirected confounding between observed variables.
+    mechanisms : list of callables
+        Required list of callable mechanisms (functions) that will be randomly assigned per causal relation (parent->child).
+        Each callable should accept at least one argument: the parent value. If it accepts two arguments, the second
+        will be passed the noise for the child (useful for multiplicative or noise-dependent mechanisms). The final
+        structural function for a child is the additive sum of the contributions from each parent-mechanism plus the
+        child's exogenous noise.
+    u_dist : None|callable|dict
+        Passed through to the SCM constructor to control noise sampling.
+    seed : Optional[int]
+        Seed for reproducibility of random mechanism selection.
+
+    Returns
+    -------
+    SCM
+        An instance of SCM built from the provided ADMG and function specifications.
+    """
+    rng = np.random.default_rng(seed)
+
+    # observed variables from the ADMG
+    v = sorted(admg.get_vertices())
+
+    # Create latent variables for each confounded/bidirected edge
+    confounded = sorted(admg.get_confounded_edges())
+    u: List[Hashable] = []
+    latent_map: Dict[Tuple[Hashable, Hashable], Hashable] = {}
+
+    v_in_conf =[]
+    for (a, b) in confounded:
+        base_name = f"U_{a}_{b}"
+        name = base_name
+        i = 1
+        # ensure uniqueness if edge names collide
+        while name in u:
+            name = f"{base_name}_{i}"
+            i += 1
+        latent_map[(a, b)] = name
+        u.append(name)
+        v_in_conf += [a, b]
+
+    for tgt in sorted(admg.get_vertices()):
+        name = f"U_{tgt}"
+        latent_map[(tgt, tgt)] = name
+        u.append(name)
+
+    # Build f mapping expected by SCM
+    f_map: Dict[Hashable, Dict[str, Any]] = {}
+
+    # mechanisms is required by API
+    if mechanisms is None or len(mechanisms) == 0:
+        raise ValueError("`mechanisms` must be a non-empty list of callables")
+
+    # Precompute directed edges set among observed vertices for validation
+    directed_edges = set(admg.get_directed_edges())
+
+    # Helper to create default additive function
+    def _make_default(parents_list: List[Hashable]):
+        def default_func(par_vals, noise):
+            s = 0.0
+            for p in parents_list:
+                s += float(par_vals.get(p, 0.0))
+            s += noise
+            return s
+        return default_func
+
+    # Construct observed variable specs: parents come from ADMG + latent confounders we created
+    for var in v:
+        parents = list(admg.get_parents(var))
+        # add latent parents created for confounding involving `var`
+        for (a, b), lname in latent_map.items():
+            if var == a or var == b:
+                parents.append(lname)
+
+        # Validate that every observed parent corresponds to a directed edge in the ADMG
+        for p in parents:
+            if p in v:
+                if (p, var) not in directed_edges:
+                    raise ValueError(f"Parent '{p}' for variable '{var}' is not a directed parent in the provided ADMG")
+            elif p in u:
+                # latent parent created by us -- ok
+                continue
+            else:
+                raise ValueError(f"Parent '{p}' for variable '{var}' is neither an observed vertex nor a created latent in this ADMG-based SCM")
+
+        # For each parent we pick a mechanism (callable) uniformly at random from `mechanisms` and
+        # build the child's structural function as the additive sum of parent->child contributions plus noise.
+        if len(parents) > 0:
+            picked_list: List[Callable] = [rng.choice(mechanisms) for _ in parents]
+
+            def make_combined(parents_list: List[Hashable], mechs: List[Callable]):
+                def combined(par_vals, noise):
+                    s = 0.0
+                    for p, mech in zip(parents_list, mechs):
+                        val = par_vals.get(p, 0.0)
+                        # attempt calling mech(val) or mech(val, noise)
+                        try:
+                            contrib = mech(val)
+                        except TypeError:
+                            try:
+                                contrib = mech(val, noise)
+                            except Exception:
+                                contrib = float(val)
+                        except Exception:
+                            contrib = float(val)
+                        s += float(contrib)
+                    s += noise
+                    return s
+                return combined
+
+            func = make_combined(parents, picked_list)
+        else:
+            func = _make_default(parents)
+
+        f_map[var] = {'parents': parents, 'func': func}
+
+    # Construct latent variable specs (exogenous noise). Latents are pure noise sources (no parents).
+    for latent in u:
+        f_map[latent] = {'parents': [], 'func': None}
+
+    scm = SCM(v=v, u=u, f=f_map, u_dist=u_dist)
+    return scm
+
+
 if __name__ == '__main__':
     # def univ():
     #     return np.random.uniform(0.51, 1)
-    scm, coefficients, intercepts = create_random_linear_scm(num_v=3, p_edge=0.6, seed=0, unmeasured_confounding=True)
+    scm, coefficients, intercepts = create_random_linear_scm(num_v=3, p_edge=0.6, seed=1, unmeasured_confounding=True)
     df_obs, df_lat = scm.generate_data(n_samples=5, include_latent=True, seed=0)
     dag = scm.induced_admg()
     print(dag.get_confounded_edges())
@@ -352,3 +489,8 @@ if __name__ == '__main__':
     print('\nExample function for X0:', scm.f.get('X0', {}).get('func'))
     print(scm.f)
     dag.draw_graph()
+
+    nl_scm = create_random_additive_scm_from_admg(dag, mechanisms=[lambda x: 2*x, lambda x: x**2], seed=1)
+    df_obs, df_lat = scm.generate_data(n_samples=5, include_latent=True, seed=0)
+    print(df_obs)
+    print(df_lat)

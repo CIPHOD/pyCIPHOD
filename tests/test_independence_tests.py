@@ -83,6 +83,6 @@ def test_cimhtest_get_pvalue_discrete_delegates_and_is_in_0_1():
     ct = CIMhTest("x", "y")
     # Treat x and y as discrete to force plugin entropy paths
     ct.discrete_vars = ["x", "y"]
-    pval = ct.get_pvalue(df, n_permutations=50, seed=0)
+    pval = ct.get_pvalue_by_permutation(df, n_permutations=50, seed=0)
     assert np.isfinite(pval)
     assert 0.0 <= pval <= 1.0

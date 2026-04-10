@@ -22,7 +22,7 @@ root = Path(__file__).resolve().parent
 # Specific imports
 from pyciphod.causal_discovery.basic.constraint_based import PC
 from pyciphod.causal_discovery.local.local_constraint_based import LocPC
-from pyciphod.utils.independence_tests.basic import GsqTest as Gsq
+from pyciphod.utils.stat_tests.independence_tests import GsqTest as Gsq
 
 # Optional dependencies (pyciphod internals + baselines).
 # Do not raise on import; instead set a flag and raise with instruction only when trying to run the script.
@@ -99,8 +99,8 @@ def replace_indices_by_names(data, res):
 # CDE Methods (Discrete)
 # =========================================
 def locpc_CDE(data, treatment, outcome):
-    alg = LocPC(data, ci_test=Gsq)
-    res = alg.run_locPC_CDE(treatment, outcome)
+    alg = LocPC(outcome, ci_test=Gsq)
+    res = alg.run_locPC_CDE(treatment, outcome, data)
     return {
         'identifiability': res['identifiability'],
         'adjustment_set': res['adjustment_set'],

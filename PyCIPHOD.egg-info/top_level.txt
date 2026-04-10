@@ -1,6 +1,0 @@
-PyCIPHOD
-build
-examples
-reproducibility
-src
-tests

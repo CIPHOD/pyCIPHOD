@@ -2,7 +2,7 @@ import pytest
 import pandas as pd
 
 from pyciphod.causal_discovery.basic.constraint_based import PC
-from pyciphod.utils.background_knowledge.background_knowledge import BackgroundKnowledge
+from pyciphod.utils.graphs.background_knowledge import BackgroundKnowledge
 
 
 @pytest.fixture

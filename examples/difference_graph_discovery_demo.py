@@ -29,8 +29,11 @@ if SRC not in sys.path:
     sys.path.insert(0, SRC)
 
 from pyciphod.utils.graphs.graphs import create_random_dag, AcyclicDirectedMixedGraph
-from pyciphod.causal_discovery.difference.difference_constraint_based import DifferencePC
+from pyciphod.causal_discovery.difference.difference_constraint_based import LinearDifferencePC
 from pyciphod.utils.scms.scm import create_random_linear_scm_from_dag, LinearSCM
+from pyciphod.utils.stat_tests.equality_tests import LinearRegressionCoefficientEqualityTest
+from pyciphod.utils.stat_tests.equality_tests import GComputationEqualityTest
+from pyciphod.utils.stat_tests.equality_tests import PartialCorrelationEqualityTest
 
 
 def make_two_scms_from_dag(dag: AcyclicDirectedMixedGraph, n_samples: int = 1000, frac_change: float = 0.2, seed: int = None) -> Tuple[pd.DataFrame, pd.DataFrame, Set[Tuple[str, str]]]:
@@ -43,6 +46,8 @@ def make_two_scms_from_dag(dag: AcyclicDirectedMixedGraph, n_samples: int = 1000
     """
     # Use package helper to sample a random linear SCM for the given DAG
     scm0, coefficients0, intercepts0 = create_random_linear_scm_from_dag(dag, seed=seed)
+    dg = scm0.induced_dag()
+    dg.draw_graph()
     # produce data1
     df1 = scm0.generate_data(n_samples, include_latent=False, seed=seed)
 
@@ -52,7 +57,7 @@ def make_two_scms_from_dag(dag: AcyclicDirectedMixedGraph, n_samples: int = 1000
         return df1.copy(), df1.copy(), set()
 
     # Build coefficients for SCM1 (copy) and SCM2 (perturbed)
-    coeff1 = dict(coefficients0)
+    # coeff1 = dict(coefficients0)
     coeff2 = dict(coefficients0)
 
     rng = np.random.default_rng(seed)
@@ -66,10 +71,15 @@ def make_two_scms_from_dag(dag: AcyclicDirectedMixedGraph, n_samples: int = 1000
         if key not in coeff2:
             # if for some reason missing, skip
             continue
-        if rng.random() < 0.5:
-            coeff2[key] = -coeff2[key]
+        # if rng.random() < 0.5:
+        print(coeff2[key])
+        if abs(coeff2[key]) > 0.1:
+            coeff2[key] = -coeff2[key] * 2
         else:
-            coeff2[key] = float(rng.uniform(-1.0, 1.0))
+            coeff2[key] = 0.5
+        print(coeff2[key])
+        # else:
+        #     coeff2[key] = float(rng.uniform(-1.0, 1.0))
         changed_edges.add(key)
 
     # Create second LinearSCM using same observed and latent variables and intercepts
@@ -120,7 +130,7 @@ def run_single_trial(num_vars=10, edge_prob=0.2, n_samples=500, frac_change=0.2,
 
     print(true_changed)
     # Run DifferencePC
-    dp = DifferencePC(sparsity=0.05, n_permutations=n_permutations, seed=seed)
+    dp = LinearDifferencePC(sparsity=0.05, n_permutations=n_permutations, seed=seed, eq_test=LinearRegressionCoefficientEqualityTest)
     try:
         dp.run(df1, df2)
     except Exception as e:
@@ -150,4 +160,4 @@ def run_experiments(n_repeats=10, num_vars=10, edge_prob=0.2, n_samples=500, fra
 
 
 if __name__ == '__main__':
-    R, S = run_experiments(n_repeats=5, num_vars=5, edge_prob=0.25, n_samples=1000, frac_change=0.25, n_permutations=500)
+    R, S = run_experiments(n_repeats=5, num_vars=5, edge_prob=0.25, n_samples=1000, frac_change=0.025, n_permutations=100)

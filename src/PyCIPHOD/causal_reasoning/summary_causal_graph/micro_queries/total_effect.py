@@ -6,7 +6,7 @@ from pyciphod.utils.graphs.partially_specified_graphs import SummaryCausalGraph
 def id_identifiable_by_adjustment_from_scg(g:SummaryCausalGraph, x:str, y:str, gamma=0):
     sccs_x = g.get_strongly_connected_components(x)
     g_x = copy.deepcopy(g)
-    g_x.remove_ongoing_edges(x)
+    g_x.remove_incoming_edges(x)
     g_x.remove_outgoing_edges(x)
     ancs_y = g_x.get_ancestors(y)
     cyc_y = g.get_simple_cycles(y)
