@@ -1,4 +1,4 @@
-# <span style="color:#F7B617">Py</span><span style="color:#c82804">CIPHOD</span> - <span style="color:#4851a1">Python package for Causal Inference in Public Health using Observational Databases</span> (Beta)
+# <span style="color:#F7B617">py</span><span style="color:#c82804">ciphod</span> - <span style="color:#4851a1">Python package for Causal Inference in Public Health using Observational Databases</span> (Beta)
 
 
 ## ⚠️ Status
@@ -10,9 +10,7 @@
 
 ## Introduction
 
-PyCIPHOD is a robust and versatile Python package developed and maintained by the CIPHOD team at the Pierre Louis Institute of Epidemiology and Public Health, INSERM, Sorbonne University. It is designed to empower epidemiologists and practitioners to uncover and understand intricate causal mechanisms in their data. PyCIPHOD offers a comprehensive suite of methods for causal inference, including causal discovery, causal reasoning, and root cause analysis, and is suited for both fully specified and partially specified graphs. It effectively handles temporal data, such as time series or cohort data, addressing the evolving needs of epidemiologists.
-
-
+pyciphod is a robust and versatile Python package developed and maintained by the CIPHOD team at the Pierre Louis Institute of Epidemiology and Public Health, INSERM, Sorbonne University. It is designed to empower epidemiologists and practitioners to uncover and understand intricate causal mechanisms in their data. pyciphod offers a comprehensive suite of methods for causal inference, including causal discovery, causal reasoning, and root cause analysis, and is suited for both fully specified and partially specified graphs. It effectively handles temporal data, such as time series or cohort data, addressing the evolving needs of epidemiologists.
 
 
 ## Key features
@@ -22,10 +20,10 @@ PyCIPHOD is a robust and versatile Python package developed and maintained by th
 * Time series
 * Cohorts
 
-### Temporal graphs
+### Graphs
 * Fully specified graphs
 * Partially specified graphs: partially oriented graphs, cluster graphs, summary causal graphs, difference graphs
-
+* Temporal graphs: dynamic causal graphs
 
 ### Causal discovery
 * Classical causal discovery:  Learn the entire causal structure of the dataset, which can be computationally intensive and may not always be necessary for specific research questions.
@@ -40,8 +38,10 @@ PyCIPHOD is a robust and versatile Python package developed and maintained by th
 ### Causal reasoning and estimation
 * Determine whether a causal effect can be uniquely computed from the available data and the structure of the causal graph.
 * If the causal effect can be uniquely derived, obtain an estimand to be used for estimating the causal effect from the data. 
-* Apply statistical methods to estimate the estimand from the available data.
-* Search optimal 
+
+
+### Causal  estimation
+* Estimate causal effects from data using a variety of methods.
 
 ### Root cause analysis
 * Identify and analyze the root causes of observed anomalies by using causal graphs to trace the origins of effects within your data. 
@@ -74,3 +74,6 @@ About root cause analysis
 * Federico Baldo
 * Simon Ferreira
 * Timothée Loranchet
+*  Willow Scott
+*  Sarah Semlali
+*  Anouk Ruer
