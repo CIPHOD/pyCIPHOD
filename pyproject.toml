@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pyCIPHOD"
+name = "pyciphod"
 version = "0.1.0"
 description = "A Python package for causal discovery, causal inference, and root cause analysis"
 readme = "README.md"
@@ -13,7 +13,10 @@ authors = [
   {name = "Charles Assaad", email = "charles.assaad@inserm.fr"},
     {name = "Federico Baldo"},
     {name = "Simon Ferreira"},
-    {name = "Timothée Loranchet"}
+    {name = "Timothée Loranchet"},
+    {name = "Willow Scott"},
+    {name = "Sarah Semlali"},
+    {name = "Anouk Ruer"}
 ]
 dependencies = [
     "networkx>0",
