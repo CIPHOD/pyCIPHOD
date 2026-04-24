@@ -9,7 +9,7 @@ from pyciphod.utils.graphs.partially_specified_graphs import (
     CompletedPartiallyDirectedAcyclicDifferenceGraph,
 )
 from pyciphod.utils.stat_tests.equality_tests import CeTests, PartialCorrelationEqualityTest
-from pyciphod.utils.background_knowledge.background_knowledge import BackgroundKnowledge
+from pyciphod.utils.graphs.background_knowledge import BackgroundKnowledge
 
 
 class DifferenceConstraintBased(ABC):

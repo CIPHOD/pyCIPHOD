@@ -3,6 +3,8 @@ from sklearn.linear_model import LinearRegression as lr
 import numpy as np
 import pandas as pd
 from scipy.special import digamma
+from scipy import linalg
+from scipy.stats import invwishart, norm, truncnorm
 from typing import List, Optional, Sequence, Union
 
 
@@ -331,6 +333,418 @@ class KernelPartialCorrelation(DependenceMeasures):
             # Clip to [-1, 1]
             r = float(max(-1.0, min(1.0, r)))
             return r
+        except Exception:
+            return np.nan
+
+
+def _copula_spd(A):
+    A = np.asarray(A, dtype=float)
+    A = (A + A.T) / 2.0
+    I = np.eye(A.shape[0])
+    for _ in range(6):
+        try:
+            np.linalg.cholesky(A)
+            return A
+        except np.linalg.LinAlgError:
+            m = np.min(np.linalg.eigvalsh(A))
+            A = A + ((1e-8 - m) if m < 1e-8 else 1e-8) * I
+    return A
+
+
+def _copula_corr(V):
+    d = np.sqrt(np.clip(np.diag(V), 1e-12, None))
+    C = V / np.outer(d, d)
+    np.fill_diagonal(C, 1.0)
+    return (C + C.T) / 2.0
+
+
+def _copula_partial_corr(C):
+    try:
+        P = linalg.inv(C)
+    except Exception:
+        P = np.linalg.pinv(C)
+    d = np.sqrt(np.clip(np.diag(P), 1e-12, None))
+    PC = -P / np.outer(d, d)
+    np.fill_diagonal(PC, 1.0)
+    return (PC + PC.T) / 2.0
+
+
+def _encode_copula_df(df):
+    """
+    Encode a dataframe for Hoff-style Gaussian copula estimation.
+
+    Supported:
+    - numeric / bool
+    - ordered pandas categoricals
+    - unordered binary categoricals
+
+    Returns
+    -------
+    X : pd.DataFrame
+        Encoded numeric dataframe
+    R : np.ndarray
+        Integer rank-level matrix, -1 for missing
+    """
+    X = pd.DataFrame(index=df.index)
+    R = np.full(df.shape, -1, dtype=int)
+
+    for j, col in enumerate(df.columns):
+        s = df[col]
+
+        if pd.api.types.is_bool_dtype(s) or pd.api.types.is_numeric_dtype(s):
+            v = pd.to_numeric(s, errors="coerce").astype(float)
+
+        elif isinstance(s.dtype, pd.CategoricalDtype) and s.cat.ordered:
+            v = s.cat.codes.astype(float)
+            v[v < 0] = np.nan
+            v = pd.Series(v, index=s.index)
+
+        else:
+            u = pd.unique(s.dropna())
+            if len(u) == 2:
+                order = sorted(u, key=lambda z: str(z))
+                v = s.map({order[0]: 0.0, order[1]: 1.0}).astype(float)
+            else:
+                raise ValueError(f"Unsupported column '{col}' for copula encoding")
+
+        obs = v.dropna().to_numpy()
+        if len(obs) < 2 or np.unique(obs).size < 2:
+            raise ValueError(f"Degenerate column '{col}'")
+
+        uniq = np.unique(obs)
+        mask = v.notna().to_numpy()
+        R[mask, j] = np.searchsorted(uniq, v.to_numpy()[mask], side="left")
+        X[col] = v
+
+    return X, R
+
+
+def estimate_effective_n_from_samples(C_samples, raw_n=None, min_var=1e-10):
+    """
+    Estimate effective sample size from Gibbs samples of correlation matrices.
+
+    Parameters
+    ----------
+    C_samples : np.ndarray
+        Shape (m, p, p), retained Gibbs samples of latent correlation matrices.
+    raw_n : int or float, optional
+        Optional upper cap for the estimate.
+    min_var : float
+        Variance floor.
+
+    Returns
+    -------
+    float
+        Effective sample size estimate or np.nan.
+    """
+    C_samples = np.asarray(C_samples, dtype=float)
+
+    if C_samples.ndim != 3:
+        return np.nan
+
+    m, p, p2 = C_samples.shape
+    if p != p2 or m < 2 or p < 2:
+        return np.nan
+
+    vals = []
+    for i in range(p):
+        for j in range(i + 1, p):
+            x = C_samples[:, i, j]
+            mu = float(np.mean(x))
+            var = float(np.var(x, ddof=1))
+
+            if not np.isfinite(mu) or not np.isfinite(var) or var <= min_var:
+                continue
+
+            nu_ij = ((1.0 - mu * mu) ** 2) / var
+            if np.isfinite(nu_ij) and nu_ij > 0:
+                vals.append(nu_ij)
+
+    if len(vals) == 0:
+        return np.nan
+
+    n_eff = float(np.mean(vals))
+
+    if raw_n is not None:
+        try:
+            raw_n = float(raw_n)
+            if np.isfinite(raw_n):
+                n_eff = float(np.clip(n_eff, 4.0, raw_n))
+        except Exception:
+            pass
+
+    return n_eff
+
+
+def compute_copula_fit(
+    df,
+    cols=None,
+    n_iter=600,
+    burn_in=200,
+    thin=2,
+    random_state=0,
+    return_samples=False,
+):
+    """
+    Compute Hoff-style posterior mean latent correlation matrix and
+    an approximate effective sample size.
+
+    Returns
+    -------
+    dict
+        Keys:
+        - 'copula_matrix' : pd.DataFrame
+        - 'effective_n'   : float
+        - 'columns'       : list[str]
+        - 'samples'       : np.ndarray, optional
+    """
+    if cols is None:
+        cols = list(df.columns)
+    else:
+        cols = list(cols)
+
+    if len(cols) < 2:
+        raise ValueError("Need at least 2 columns to compute a copula matrix")
+
+    X, R = _encode_copula_df(df[cols].copy())
+    n, p = X.shape
+    if n < 3:
+        raise ValueError("Need at least 3 rows to compute a copula matrix")
+
+    rng = np.random.default_rng(random_state)
+
+    # Initialize latent Z from Gaussian mid-rank scores
+    Z = np.zeros((n, p), dtype=float)
+    for j in range(p):
+        rj = R[:, j]
+        obs = rj >= 0
+
+        lev, cnt = np.unique(rj[obs], return_counts=True)
+        cum = np.cumsum(cnt)
+        mids = (np.concatenate([[0], cum[:-1]]) + 0.5 * cnt) / cnt.sum()
+        mids = np.clip(mids, 1e-6, 1 - 1e-6)
+        mapping = {int(a): float(norm.ppf(b)) for a, b in zip(lev, mids)}
+
+        for a in lev:
+            Z[rj == a, j] = mapping[int(a)]
+
+        if np.any(~obs):
+            Z[~obs, j] = rng.standard_normal(np.sum(~obs))
+
+    Z -= Z.mean(axis=0, keepdims=True)
+    sd = np.std(Z, axis=0, ddof=1, keepdims=True)
+    sd = np.where(sd < 1e-8, 1.0, sd)
+    Z /= sd
+
+    V = _copula_corr(_copula_spd(np.cov(Z, rowvar=False)))
+    obs_mask = (R >= 0)
+    nu0 = p + 2
+    kept = []
+
+    for it in range(n_iter):
+        for j in rng.permutation(p):
+            o = np.arange(p) != j
+            Voo = _copula_spd(V[np.ix_(o, o)])
+            Voj = V[o, j]
+
+            beta = linalg.solve(Voo, Voj, assume_a="sym")
+            mu = Z[:, o] @ beta
+            var = max(float(V[j, j] - V[j, o] @ beta), 1e-10)
+            sdj = np.sqrt(var)
+
+            rj = R[:, j]
+            oj = obs_mask[:, j]
+
+            if np.any(oj):
+                for r in np.unique(rj[oj]):
+                    idx = np.where(rj == r)[0]
+                    lo_pool = Z[oj & (rj < r), j]
+                    hi_pool = Z[oj & (rj > r), j]
+                    lo = -np.inf if lo_pool.size == 0 else np.max(lo_pool)
+                    hi = np.inf if hi_pool.size == 0 else np.min(hi_pool)
+                    a = (lo - mu[idx]) / sdj
+                    b = (hi - mu[idx]) / sdj
+                    Z[idx, j] = truncnorm.rvs(
+                        a, b, loc=mu[idx], scale=sdj, random_state=rng
+                    )
+
+            miss = np.where(~oj)[0]
+            if miss.size:
+                Z[miss, j] = rng.normal(mu[miss], sdj, size=miss.size)
+
+        S = _copula_spd(nu0 * np.eye(p) + Z.T @ Z)
+        V = _copula_spd(
+            np.asarray(invwishart.rvs(df=nu0 + n, scale=S, random_state=rng), dtype=float)
+        )
+
+        if it >= burn_in and (it - burn_in) % thin == 0:
+            kept.append(_copula_corr(V))
+
+    if len(kept) == 0:
+        raise ValueError("No posterior draws kept; check MCMC settings")
+
+    C_samples = np.stack(kept, axis=0)
+    C_mean = _copula_corr(np.mean(C_samples, axis=0))
+    n_eff = estimate_effective_n_from_samples(C_samples, raw_n=n)
+
+    out = {
+        "copula_matrix": pd.DataFrame(C_mean, index=cols, columns=cols),
+        "effective_n": float(n_eff) if np.isfinite(n_eff) else np.nan,
+        "columns": cols,
+    }
+
+    if return_samples:
+        out["samples"] = C_samples
+
+    return out
+
+
+def compute_copula_matrix(
+    df,
+    cols=None,
+    n_iter=600,
+    burn_in=200,
+    thin=2,
+    random_state=0,
+):
+    """
+    Backward-compatible wrapper returning only the posterior mean
+    latent correlation matrix.
+    """
+    return compute_copula_fit(
+        df=df,
+        cols=cols,
+        n_iter=n_iter,
+        burn_in=burn_in,
+        thin=thin,
+        random_state=random_state,
+        return_samples=False,
+    )["copula_matrix"]
+
+
+class Copula(DependenceMeasures):
+    """
+    Hoff-style semiparametric Gaussian copula dependence measure.
+
+    Behavior
+    --------
+    - if cond_list is empty: returns latent correlation Corr(X, Y)
+    - if cond_list exists: returns latent partial correlation Corr(X, Y | Z)
+
+    Reuse
+    -----
+    You can pass either:
+    - copula_fit: dict returned by compute_copula_fit(...)
+    - copula_matrix: pd.DataFrame or np.ndarray
+
+    If neither is given, the matrix is computed locally from the columns
+    [x, y] + cond_list.
+    """
+
+    def __init__(
+        self,
+        x,
+        y,
+        cond_list=None,
+        drop_na=False,
+        copula_fit=None,
+        copula_matrix=None,
+        matrix_columns=None,
+        n_iter=600,
+        burn_in=200,
+        thin=2,
+        random_state=0,
+    ):
+        super().__init__(x, y, cond_list, drop_na)
+        self.copula_fit = copula_fit
+        self.copula_matrix = copula_matrix
+        self.matrix_columns = matrix_columns
+        self.n_iter = n_iter
+        self.burn_in = burn_in
+        self.thin = thin
+        self.random_state = random_state
+
+    def _cond_cols(self):
+        if self.cond_list is None:
+            return []
+        if isinstance(self.cond_list, str):
+            return [self.cond_list]
+        return list(self.cond_list)
+
+    def _matrix_to_df(self, M, cols, matrix_columns=None):
+        if isinstance(M, pd.DataFrame):
+            return M
+
+        M = np.asarray(M, dtype=float)
+
+        if matrix_columns is None:
+            if M.shape[0] != len(cols) or M.shape[1] != len(cols):
+                raise ValueError(
+                    "matrix_columns must be provided when copula_matrix is a NumPy array "
+                    "unless its shape matches [x, y] + cond_list exactly"
+                )
+            return pd.DataFrame(M, index=cols, columns=cols)
+
+        matrix_columns = list(matrix_columns)
+        if M.shape[0] != len(matrix_columns) or M.shape[1] != len(matrix_columns):
+            raise ValueError("copula_matrix shape does not match matrix_columns")
+
+        return pd.DataFrame(M, index=matrix_columns, columns=matrix_columns)
+
+    def _get_matrix_df(self, df, cols):
+        if self.copula_fit is not None:
+            if isinstance(self.copula_fit, dict) and "copula_matrix" in self.copula_fit:
+                return self._matrix_to_df(
+                    self.copula_fit["copula_matrix"],
+                    cols=cols,
+                    matrix_columns=self.copula_fit.get("columns", None),
+                )
+            raise ValueError("copula_fit must be a dict returned by compute_copula_fit")
+
+        if self.copula_matrix is not None:
+            return self._matrix_to_df(
+                self.copula_matrix,
+                cols=cols,
+                matrix_columns=self.matrix_columns,
+            )
+
+        # Fallback: compute only from needed columns
+        local_df = self._prepare_data(df)
+        return compute_copula_fit(
+            df=local_df,
+            cols=cols,
+            n_iter=self.n_iter,
+            burn_in=self.burn_in,
+            thin=self.thin,
+            random_state=self.random_state,
+            return_samples=False,
+        )["copula_matrix"]
+
+    def get_dependence(self, df):
+        cond = self._cond_cols()
+        cols = [self.x, self.y] + cond
+
+        try:
+            Cdf = self._get_matrix_df(df, cols)
+            Cdf = Cdf.loc[cols, cols]
+            C = Cdf.to_numpy(dtype=float)
+        except Exception:
+            return np.nan
+
+        try:
+            if C.shape[0] < 2:
+                return np.nan
+
+            if len(cond) == 0:
+                val = float(C[0, 1])
+            else:
+                PC = _copula_partial_corr(C)
+                val = float(PC[0, 1])
+
+            if not np.isfinite(val):
+                return np.nan
+
+            return float(np.clip(val, -1.0, 1.0))
         except Exception:
             return np.nan
 

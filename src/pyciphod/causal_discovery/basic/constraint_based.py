@@ -32,7 +32,7 @@ class ConstraintBased(ABC):
         pass
 
     @abstractmethod
-    def _skeleton(self, data: pd.DataFrame = None, max_sepset_size: int = None):
+    def _skeleton(self, data: pd.DataFrame = None, max_sepset_size: int = None, dependence_matrix:Optional[pd.DataFrame] = None, effective_n:Optional[pd.DataFrame] = None):
         """Construct the skeleton of the graph using CI tests."""
         pass
 
@@ -41,9 +41,9 @@ class ConstraintBased(ABC):
         """Orient edges using rules based on the skeleton and separation sets."""
         pass
 
-    def run(self, data: pd.DataFrame = None):
+    def run(self, data: pd.DataFrame = None, dependence_matrix:Optional[pd.DataFrame] = None, effective_n:Optional[pd.DataFrame] = None):
         """Execute the full constraint-based algorithm."""
-        self._skeleton(data)
+        self._skeleton(data, dependence_matrix=dependence_matrix, effective_n=effective_n)
         self._apply_background_knowledge()
         self._orientation()
 
@@ -70,7 +70,7 @@ class PC(ConstraintBased):
         """Return the graph object used by the algorithm."""
         return CompletedPartiallyDirectedAcyclicGraph()
 
-    def _skeleton(self, data: pd.DataFrame = None, max_sepset_size: int = None):
+    def _skeleton(self, data: pd.DataFrame = None, max_sepset_size: int = None, dependence_matrix:Optional[pd.DataFrame] = None, effective_n:Optional[pd.DataFrame] = None):
         """
         Construct the skeleton of the graph using an order-independent approach
         following Colombo & Maathuis (2014). Iteratively removes edges based on CI tests.
@@ -82,23 +82,35 @@ class PC(ConstraintBased):
         data_test = data
         s = 0
         repeat = True
-        while repeat and s < max_sepset_size:
+        while repeat and s <= max_sepset_size:
             repeat = False
             adj = {x: self.g_hat.get_adjacencies(x) for x in nodes}
+            treated = []
             for x in nodes:
                 if len(adj[x]) - 1 >= s:
                     repeat = True
                     for y in sorted(adj[x]):
                         for S in combinations([a for a in sorted(adj[x]) if a != y], s):
-                            test = self._ci_test(x, y, list(S), self._twd)
-                            self.performed_tests.add((x,y,S))
-                            self.nb_ci_tests += 1
-                            if self._twd:
-                                data_test = data.dropna(subset=[x, y] + list(S))
-                            if test.get_pvalue(data_test) > self._sparsity:
-                                self.g_hat.remove_undirected_edge(x, y)
-                                self.sepset[(x, y)] = self.sepset[(y, x)] = S
-                                break
+                            if (y, x, S) not in treated:
+                                treated.append((x, y, S))
+                                if dependence_matrix is not None:
+                                    test = self._ci_test(x, y, list(S), self._twd, copula_matrix=dependence_matrix, effective_n=effective_n)
+                                else:
+                                    test = self._ci_test(x, y, list(S), self._twd)
+                                self.performed_tests.add((x,y,S))
+                                self.nb_ci_tests += 1
+                                if self._twd:
+                                    data_test = data.dropna(subset=[x, y] + list(S))
+                                try:
+                                    pval = test.get_pvalue(data_test)
+                                except:
+                                    print(test, "relies on get_pvalue_by_permutation for p-value estimation")
+                                    pval = test.get_pvalue_by_permutation(data_test)
+                                print(x, y, S, pval)
+                                if pval > self._sparsity:
+                                    self.g_hat.remove_undirected_edge(x, y)
+                                    self.sepset[(x, y)] = self.sepset[(y, x)] = S
+                                    break
             s += 1
 
     def _apply_background_knowledge(self):
@@ -212,8 +224,8 @@ class RestPC(PC):
         super().__init__(sparsity, ci_test, background_knowledge, twd)
         # Additional attributes for RestPC can be defined here, such as the representation of the rest graph and rules for handling selection bias.
 
-    def _skeleton(self, data: pd.DataFrame = None, max_sepset_size: int = 1):
-        super()._skeleton(data, max_sepset_size=1)  # Run only one iteration of the skeleton phase of PC
+    def _skeleton(self, data: pd.DataFrame = None, max_sepset_size: int = 1, dependence_matrix:Optional[pd.DataFrame] = None, effective_n:Optional[pd.DataFrame] = None):
+        super()._skeleton(data, max_sepset_size=0, dependence_matrix=dependence_matrix, effective_n=effective_n)  # Run only one iteration of the skeleton phase of PC
 
     def _orientation(self):
         """Orient edges using the UC rule."""
@@ -225,8 +237,7 @@ class FCI(ConstraintBased):
         super().__init__(sparsity, ci_test, background_knowledge, twd)
         # Additional attributes for FCI can be defined here, such as the PAG representation and rules for handling latent confounders and selection bias.
 
-
-    def _skeleton(self, data: pd.DataFrame = None):
+    def _skeleton(self, data: pd.DataFrame = None, max_sepset_size: int = None, dependence_matrix:Optional[pd.DataFrame] = None, effective_n:Optional[pd.DataFrame] = None):
         # TODO
         1
 

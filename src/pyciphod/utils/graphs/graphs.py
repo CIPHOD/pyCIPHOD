@@ -17,10 +17,10 @@ class Graph:
 
         self._g = nx.MultiDiGraph()
 
-        self._directed_g.nodes = self._g.nodes
-        self._confounded_g.nodes = self._g.nodes
-        self._undirected_g.nodes = self._g.nodes
-        self._uncertain_g.nodes = self._g.nodes
+        # self._directed_g.nodes = self._g.nodes
+        # self._confounded_g.nodes = self._g.nodes
+        # self._undirected_g.nodes = self._g.nodes
+        # self._uncertain_g.nodes = self._g.nodes
 
         self._list_certain_edge_types = ['<->', '->', '-']
         self._list_uncertain_edge_types = ['o-o', 'o->', 'o-', '--', '-->', '-||']
@@ -41,6 +41,10 @@ class Graph:
     def add_vertex(self, vertex: Hashable) -> None:
         if vertex not in self._g.nodes:
             self._g.add_node(vertex)
+            self._directed_g.add_node(vertex)
+            self._confounded_g.add_node(vertex)
+            self._undirected_g.add_node(vertex)
+            self._uncertain_g.add_node(vertex)
 
     def add_vertices(self, vertices_list: list) -> None:
         for vertex in vertices_list:
