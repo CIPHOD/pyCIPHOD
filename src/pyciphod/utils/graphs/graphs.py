@@ -6,6 +6,9 @@ from typing import Type, Optional, Set, Tuple, Iterable, FrozenSet
 from typing import Hashable
 from itertools import combinations, product
 
+from functools import lru_cache
+
+
 
 class Graph:
     def __init__(self):

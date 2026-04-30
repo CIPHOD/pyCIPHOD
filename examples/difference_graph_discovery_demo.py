@@ -160,4 +160,4 @@ def run_experiments(n_repeats=10, num_vars=10, edge_prob=0.2, n_samples=500, fra
 
 
 if __name__ == '__main__':
-    R, S = run_experiments(n_repeats=5, num_vars=5, edge_prob=0.25, n_samples=1000, frac_change=0.025, n_permutations=100)
+    R, S = run_experiments(n_repeats=5, num_vars=10, edge_prob=0.25, n_samples=1000, frac_change=0.025, n_permutations=100)

@@ -1,7 +1,5 @@
 from typing import Iterable, List, Set
-from itertools import combinations
-
-from .graphs import Graph
+from pyciphod.utils.graphs.graphs import Graph
 
 
 def d_separated(graph: Graph, X: Iterable[str], Y: Iterable[str], Z: Iterable[str] = None, max_path_length: int = 100) -> bool:
