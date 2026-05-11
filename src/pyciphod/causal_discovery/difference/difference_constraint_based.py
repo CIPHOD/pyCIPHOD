@@ -8,7 +8,7 @@ import numpy as np
 from pyciphod.utils.graphs.partially_specified_graphs import (
     CompletedPartiallyDirectedAcyclicDifferenceGraph,
 )
-from pyciphod.utils.stat_tests.equality_tests import CeTests, PartialCorrelationEqualityTest
+from pyciphod.utils.stat_tests.equality_tests import CeTests, PartialCorrelationEqualityTest, LinearRegressionCoefficientEqualityTest
 from pyciphod.utils.graphs.background_knowledge import BackgroundKnowledge
 
 
@@ -24,7 +24,7 @@ class DifferenceConstraintBased(ABC):
     def __init__(
         self,
         sparsity: float = 0.05,
-        eq_test: Type[CeTests] = PartialCorrelationEqualityTest,
+        eq_test: Type[CeTests] = LinearRegressionCoefficientEqualityTest,
         background_knowledge: Optional[BackgroundKnowledge] = None,
         twd: Optional[bool] = False,
         n_permutations: int = 1000,
@@ -79,7 +79,7 @@ class LinearDifferencePC(DifferenceConstraintBased):
     def __init__(
         self,
         sparsity: float = 0.05,
-        eq_test: Type[CeTests] = PartialCorrelationEqualityTest,
+        eq_test: Type[CeTests] = LinearRegressionCoefficientEqualityTest,
         background_knowledge: BackgroundKnowledge = None,
         twd: bool = False,
         n_permutations: int = 1000,
@@ -134,12 +134,16 @@ class LinearDifferencePC(DifferenceConstraintBased):
                                 df2_test = df2.dropna(subset=cols)
 
                             try:
-                                pval = test.get_pvalue_by_permutation(
+                                pval = test.get_pvalue(
                                     df1_test,
                                     df2_test,
-                                    n_permutations=self._n_permutations,
-                                    seed=self._seed,
                                 )
+                                # pval = test.get_pvalue_by_permutation(
+                                #     df1_test,
+                                #     df2_test,
+                                #     n_permutations=self._n_permutations,
+                                #     seed=self._seed,
+                                # )
                             except Exception as e:
                                 warnings.warn(f"Equality test failed for ({x},{y},S={S}): {e}")
                                 pval = None
@@ -148,6 +152,7 @@ class LinearDifferencePC(DifferenceConstraintBased):
                             if pval is None or (isinstance(pval, float) and np.isnan(pval)):
                                 continue
 
+                            print(pval, " for test ", (x, y, S))
                             # If we cannot reject equality (pval > alpha), remove edge
                             if pval > self._sparsity:
                                 self.g_hat.remove_undirected_edge(x, y)

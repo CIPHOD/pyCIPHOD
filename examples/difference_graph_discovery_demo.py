@@ -130,7 +130,7 @@ def run_single_trial(num_vars=10, edge_prob=0.2, n_samples=500, frac_change=0.2,
 
     print(true_changed)
     # Run DifferencePC
-    dp = LinearDifferencePC(sparsity=0.05, n_permutations=n_permutations, seed=seed, eq_test=LinearRegressionCoefficientEqualityTest)
+    dp = LinearDifferencePC(sparsity=0.01, n_permutations=n_permutations, seed=seed, eq_test=LinearRegressionCoefficientEqualityTest)
     try:
         dp.run(df1, df2)
     except Exception as e:

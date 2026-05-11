@@ -4,6 +4,8 @@ import pandas as pd
 import warnings
 
 from sklearn.neighbors import NearestNeighbors
+from scipy import stats
+
 from pandas.api.types import (
     is_bool_dtype,
     is_integer_dtype,
@@ -326,8 +328,9 @@ class PartialCorrelationEqualityTest(CeTests, PartialCorrelation):
         # Use the PartialCorrelation mixin's implementation
         return PartialCorrelation.get_dependence(self, df)
 
-    def get_pvalue(self, *args, **kwargs):
+    def get_pvalue(self, df1, df2):
         raise NotImplementedError("Use get_pvalue_by_permutation for this test, as the distribution of the difference in partial correlations is not analytically tractable.")
+
 
 class LinearRegressionCoefficientEqualityTest(CeTests, LinearRegressionCoefficient):
     def __init__(self, x, y, cond_list=None, drop_na=False):
@@ -336,8 +339,140 @@ class LinearRegressionCoefficientEqualityTest(CeTests, LinearRegressionCoefficie
         # Use the LinearRegressionCoefficient mixin's implementation
         return LinearRegressionCoefficient.get_dependence(self, df)
 
-    def get_pvalue(self, *args, **kwargs):
-        raise NotImplementedError("Use get_pvalue_by_permutation for this test, as the distribution of the difference in regression coefficients is not analytically tractable.")
+    def get_pvalue(self, df1, df2):
+        cond_list = [] if self.cond_list is None else list(self.cond_list)
+        predictors = [self.x] + cond_list
+        cols = [self.y] + predictors
+
+        d1 = df1[cols].dropna()
+        d2 = df2[cols].dropna()
+
+        def fit_ols(d):
+            y = d[self.y].to_numpy(dtype=float)
+            X = d[predictors].to_numpy(dtype=float)
+
+            # add intercept
+            X = np.column_stack([np.ones(len(X)), X])
+
+            n, p = X.shape
+            if n <= p:
+                return np.nan, np.nan
+
+            XtX_inv = np.linalg.pinv(X.T @ X)
+            beta = XtX_inv @ X.T @ y
+            resid = y - X @ beta
+            sigma2 = np.sum(resid ** 2) / (n - p)
+
+            # coefficient and SE for self.x
+            # index 1 because index 0 is intercept
+            beta_x = beta[1]
+            se_x = np.sqrt(sigma2 * XtX_inv[1, 1])
+
+            return beta_x, se_x
+
+        beta1, se1 = fit_ols(d1)
+        beta2, se2 = fit_ols(d2)
+
+        if np.isnan(beta1) or np.isnan(beta2):
+            return np.nan
+
+        z_stat = (beta1 - beta2) / np.sqrt(se1 ** 2 + se2 ** 2)
+        p_value = 2 * (1 - stats.norm.cdf(abs(z_stat)))
+
+        return p_value
+    # def get_pvalue(self, df1, df2):
+    #     cond_list = [] if self.cond_list is None else list(self.cond_list)
+    #     cols = [self.y, self.x] + cond_list
+    #
+    #     d1 = df1[cols].dropna()
+    #     d2 = df2[cols].dropna()
+    #
+    #     X1 = sm.add_constant(d1[[self.x] + cond_list], has_constant="add")
+    #     y1 = d1[self.y]
+    #
+    #     X2 = sm.add_constant(d2[[self.x] + cond_list], has_constant="add")
+    #     y2 = d2[self.y]
+    #
+    #     m1 = sm.OLS(y1, X1).fit()
+    #     m2 = sm.OLS(y2, X2).fit()
+    #
+    #     beta1 = m1.params[self.x]
+    #     beta2 = m2.params[self.x]
+    #
+    #     se1 = m1.bse[self.x]
+    #     se2 = m2.bse[self.x]
+    #
+    #     z_stat = (beta1 - beta2) / np.sqrt(se1 ** 2 + se2 ** 2)
+    #     p_value = 2 * (1 - stats.norm.cdf(abs(z_stat)))
+    #
+    #     return p_value
+    # def get_pvalue(self, df1, df2):
+    #     """
+    #     Test equality of the regression coefficient of x in the regression
+    #     y ~ x + cond_list across two datasets df1 and df2.
+    #
+    #     H0: beta_x^{(1)} = beta_x^{(2)}
+    #
+    #     Returns
+    #     -------
+    #     p_value : float
+    #     """
+    #     cond_list = [] if self.cond_list is None else list(self.cond_list)
+    #
+    #     cols = cond_list + [self.x]
+    #     target = self.y
+    #
+    #     data1 = df1[cols + [target]].dropna()
+    #     data2 = df2[cols + [target]].dropna()
+    #
+    #     X1 = data1[cols].to_numpy()
+    #     y1 = data1[target].to_numpy()
+    #
+    #     X2 = data2[cols].to_numpy()
+    #     y2 = data2[target].to_numpy()
+    #
+    #     n1, p = X1.shape
+    #     n2, _ = X2.shape
+    #
+    #     if n1 <= p or n2 <= p:
+    #         return np.nan
+    #
+    #     S1 = np.cov(data1[cols + [target]].to_numpy(), rowvar=False)
+    #     S2 = np.cov(data2[cols + [target]].to_numpy(), rowvar=False)
+    #
+    #     idx_pred = np.arange(p)
+    #     idx_y = p
+    #
+    #     K1 = np.linalg.pinv(S1[np.ix_(idx_pred, idx_pred)])
+    #     K2 = np.linalg.pinv(S2[np.ix_(idx_pred, idx_pred)])
+    #
+    #     b1 = K1 @ S1[idx_y, idx_pred].T
+    #     b2 = K2 @ S2[idx_y, idx_pred].T
+    #
+    #     residuals1 = y1 - X1 @ b1
+    #     residuals2 = y2 - X2 @ b2
+    #
+    #     ssr1 = np.sum(residuals1 ** 2)
+    #     ssr2 = np.sum(residuals2 ** 2)
+    #
+    #     var1 = ssr1 / (n1 - p)
+    #     var2 = ssr2 / (n2 - p)
+    #
+    #     beta1_x = b1[-1]
+    #     beta2_x = b2[-1]
+    #
+    #     se2 = var1 * K1[-1, -1] + var2 * K2[-1, -1]
+    #
+    #     if se2 <= 0:
+    #         return np.nan
+    #
+    #     test_stat = (beta1_x - beta2_x) ** 2 / se2
+    #
+    #     df_denom = n1 + n2 - 2 * p
+    #     p_value = 1.0 - stats.f.cdf(test_stat, 1, df_denom)
+    #
+    #     return p_value
+
 
 class GsqEqualityTest(CeTests, Gsq):
     def __init__(self, x, y, cond_list=None, drop_na=False):

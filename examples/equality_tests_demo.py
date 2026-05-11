@@ -147,11 +147,11 @@ def run_demo(n_permutations=1000, seed=42):
 
     tests = [
         # ("PartialCorrelationEqualityTest", PartialCorrelationEqualityTest),
-        # ("LinearRegressionCoefficientEqualityTest", LinearRegressionCoefficientEqualityTest),
+        ("LinearRegressionCoefficientEqualityTest", LinearRegressionCoefficientEqualityTest),
         # ("KernelPartialCorrelation", KernelPartialCorrelationEqualityTest),
         # ("CMIhEqualityTest", CMIhEqualityTest),
         # ("SlearnerEqualityTest", SLearnerEqualityTest),
-        ("GComputationEqualityTest", GComputationEqualityTest),
+        # ("GComputationEqualityTest", GComputationEqualityTest),
     ]
 
     for name, cls in tests:
@@ -164,7 +164,8 @@ def run_demo(n_permutations=1000, seed=42):
             obs1 = inst_marg.get_dependence(df1_c)
             obs2 = inst_marg.get_dependence(df2_c)
             print(f"{name} observed (marginal): stat1={obs1}, stat2={obs2}, diff={None if obs1 is None or obs2 is None else abs(obs1-obs2)}")
-            p_marg = inst_marg.get_pvalue_by_permutation(df1_c, df2_c, n_permutations=n_permutations, seed=seed)
+            # p_marg = inst_marg.get_pvalue_by_permutation(df1_c, df2_c, n_permutations=n_permutations, seed=seed)
+            p_marg = inst_marg.get_pvalue(df1_c, df2_c)
             print(f"{name} p-value (marginal): {p_marg}")
         except Exception as e:
             print(f"Erreur {name} marginal: {e}")
@@ -175,7 +176,8 @@ def run_demo(n_permutations=1000, seed=42):
             obs1 = inst_cond.get_dependence(df1_c)
             obs2 = inst_cond.get_dependence(df2_c)
             print(f"{name} observed (cond): stat1={obs1}, stat2={obs2}, diff={None if obs1 is None or obs2 is None else abs(obs1-obs2)}")
-            p_cond = inst_cond.get_pvalue_by_permutation(df1_c, df2_c, n_permutations=n_permutations, seed=seed)
+            # p_cond = inst_cond.get_pvalue_by_permutation(df1_c, df2_c, n_permutations=n_permutations, seed=seed)
+            p_cond = inst_cond.get_pvalue(df1_c, df2_c)
             print(f"{name} p-value (cond z_cont,w_cont): {p_cond}")
         except Exception as e:
             print(f"Erreur {name} conditionnel: {e}")

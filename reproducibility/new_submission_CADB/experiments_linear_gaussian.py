@@ -58,6 +58,7 @@ def f1_score_a(g, g_hat):
     return 2 * (prec * rec) / (prec + rec), prec, rec
 
 
+
 def fork_structure(n):
     X3 = "X"
     Y3 = "Y"
@@ -262,6 +263,11 @@ def graph_10(n):
     ge.add_directed_edge(W3, Y3)
     return df, ge, gt
 
+
+def generate_graph_with_min_two_independent_parents(n):
+    1
+
+    return 1
 
 
 if __name__ == '__main__':
