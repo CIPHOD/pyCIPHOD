@@ -6,8 +6,8 @@ def meek_rule_1(g, X, Y, Z):
     :return:  True if the conditions of Meek's Rule 1 are satisfied for the triple (X, Y, Z) in g, False otherwise.
      Meek's Rule 1 states that if there is a directed edge from X to Y (X -> Y) and an undirected edge between Y and Z (Y - Z), and there is no edge between X and Z (X and Z are not adjacent), then we can orient the edge between Y and Z as Y -> Z.
     """
-    if (X, Y) in g.get_directed_edges() and (
-    Y, Z) in g.get_undirected_edges() and Z not in g.get_adjacencies(X):
+    if ((X, Y) in g.get_directed_edges()) and ((
+    Y, Z) in g.get_undirected_edges()) and (Z not in g.get_adjacencies(X)):
         return True
     return False
 

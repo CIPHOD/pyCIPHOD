@@ -22,8 +22,8 @@ Experiment: compare adjustment sets for estimating effect of X on Y
 import numpy as np
 import matplotlib.pyplot as plt
 
-from pyciphod.utils.graphs.graphs import DirectedAcyclicGraph
-from pyciphod.utils.scms.scm import create_random_linear_scm_from_dag, LinearSCM
+from pyciphod.utils import DirectedAcyclicGraph
+from pyciphod.utils import create_random_linear_scm_from_dag, LinearSCM
 from pyciphod.causal_estimation.outcome_regression import GComputation
 # meta-learners imports not needed for the current run (only GComputation used)
 from pyciphod.causal_estimation.meta_learners import SLearner, TLearner, XLearner

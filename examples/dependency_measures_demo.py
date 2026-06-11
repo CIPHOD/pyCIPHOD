@@ -10,7 +10,7 @@ This script creates small synthetic datasets and prints results for three scenar
 import numpy as np
 import pandas as pd
 
-from pyciphod.utils.stat_tests.dependency_measures import (
+from pyciphod.utils import (
     PartialCorrelation,
     LinearRegressionCoefficient,
     Gsq,

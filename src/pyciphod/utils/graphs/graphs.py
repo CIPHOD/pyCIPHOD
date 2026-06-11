@@ -196,9 +196,7 @@ class Graph:
 
     def is_active_path(self,path: list, adjustment_set: set = None) -> bool:
         """
-        Reproduit la logique de `is_active` utilisée dans les routines SCG, mais en travaillant directement
-        sur l'objet `Graph` du projet (sans construire un `sg` séparé).
-        La logique est adaptée de `causal_reasoning.cluster_graph.scg.micro_queries.direct_effect.is_active`.
+        # TODO
         """
         if adjustment_set is None:
             adjustment_set = set()

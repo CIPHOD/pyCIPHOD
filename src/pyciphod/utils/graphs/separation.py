@@ -36,6 +36,7 @@ def d_separated(graph: Graph, X: Iterable[str], Y: Iterable[str], Z: Iterable[st
             try:
                 for path in graph.get_simple_paths(x, y, allowed_nodes=None, cutoff=max_path_length):
                     if graph.is_active_path(path, Zs):
+                        # print(path)
                         # found an active path => not d-separated
                         return False
             except Exception:

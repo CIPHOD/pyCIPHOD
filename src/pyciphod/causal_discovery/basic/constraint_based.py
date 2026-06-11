@@ -150,17 +150,22 @@ class PC(ConstraintBased):
         For each unshielded triple x - y - z with x and z not adjacent, 
         orient x -> y <- z if y not in sepset(x, z).
         """
-        nodes = self.g_hat.get_vertices()
+        nodes = sorted(self.g_hat.get_vertices())
         adj = {x: self.g_hat.get_adjacencies(x) for x in nodes}
         for x in nodes:
             for y in sorted(adj[x]):
                 for z in sorted(adj[y]):
                     if z == x or z in sorted(adj[x]):
                         continue
-                    if y not in self.sepset.get((x, z), []):
-                        self.g_hat.remove_undirected_edge(x, y)
-                        self.g_hat.remove_undirected_edge(y, z)
-                        self.g_hat.add_directed_edges_from([(x, y), (z, y)])
+                    if (y not in self.sepset.get((x, z), [])):# and (y not in self.sepset.get((z, x), [])):
+                        # TODO: add many ways to handle conflics
+                        if ((x, y) in self.g_hat.get_undirected_edges()) and ((z, y) in self.g_hat.get_undirected_edges()):
+                            # if ((x, y) not in self.g_hat.get_directed_edges()) and ((z, y) not in self.g_hat.get_directed_edges()):
+                            self.g_hat.remove_undirected_edge(x, y)
+                            self.g_hat.remove_undirected_edge(y, z)
+                            self.g_hat.remove_undirected_edge(y, x)
+                            self.g_hat.remove_undirected_edge(z, y)
+                            self.g_hat.add_directed_edges_from([(x, y), (z, y)])
 
     def _apply_meek_rules(self):
         """
