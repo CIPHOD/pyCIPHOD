@@ -1,4 +1,33 @@
+from pyciphod.utils.graphs.partially_specified_graphs import SummaryCausalGraph
+from typing import Hashable
 import networkx as nx
+
+def CDE_is_identifiable(Gs: SummaryCausalGraph, X : Hashable, Y : Hashable, gamma : int) -> bool:
+    '''
+    Implements Theorem 1 of "Average Controlled and Average Natural Micro Direct Effects in Summary
+    Causal Graphs" by Ferreira and Assaad UAI 2026.
+    
+    :param Gs: Summary Causal Graph of interest
+    :type summary: SummaryCausalGraph
+    :param X: Treatment of interest
+    :type X: Hashable
+    :param Y: Outcome of interest
+    :type Y: Hashable
+    :param gamma: Lag of interest
+    :type gamma: int
+    :return: Boolean describing whether the identifiability criterion is verified or not
+    :rtype: bool
+    '''
+
+    scc_Y = Gs.get_strongly_connected_components(Y)
+    if len(scc_Y) > 1:
+        return False
+    confounded_adjacencies_Y = Gs.get_confounded_adjacencies(Y)
+    ancestors_Y = Gs.get_ancestors(Y)
+    if len(set.intersection(confounded_adjacencies_Y, ancestors_Y)) > 0:
+        return False
+    return True
+
 
 
 # def is_active(sg, path, adjustment_set = set()):
