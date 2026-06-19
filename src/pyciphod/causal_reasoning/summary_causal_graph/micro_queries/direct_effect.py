@@ -15,7 +15,7 @@ def CDE_is_identifiable(Gs: SummaryCausalGraph, X : Hashable, Y : Hashable, gamm
     :type Y: Hashable
     :param gamma: Lag of interest
     :type gamma: int
-    :return: Boolean describing whether the identifiability criterion is verified or not
+    :return: Boolean describing whether the Controlled Direct Effect is identifiable or not
     :rtype: bool
     '''
 
@@ -24,10 +24,45 @@ def CDE_is_identifiable(Gs: SummaryCausalGraph, X : Hashable, Y : Hashable, gamm
         return False
     confounded_adjacencies_Y = Gs.get_confounded_adjacencies(Y)
     ancestors_Y = Gs.get_ancestors(Y)
-    if len(set.intersection(confounded_adjacencies_Y, ancestors_Y)) > 0:
+    if bool(set.intersection(confounded_adjacencies_Y, ancestors_Y)):
         return False
     return True
 
+def NDE_is_identifiable(Gs: SummaryCausalGraph, X : Hashable, Y : Hashable, gamma : int) -> bool:
+    '''
+    Implements Theorem 2 of "Average Controlled and Average Natural Micro Direct Effects in Summary
+    Causal Graphs" by Ferreira and Assaad UAI 2026.
+    
+    :param Gs: Summary Causal Graph of interest
+    :type summary: SummaryCausalGraph
+    :param X: Treatment of interest
+    :type X: Hashable
+    :param Y: Outcome of interest
+    :type Y: Hashable
+    :param gamma: Lag of interest
+    :type gamma: int
+    :return: Boolean describing whether the Natural Direct Effect is identifiable or not
+    :rtype: bool
+    '''
+
+    scc_Y = Gs.get_strongly_connected_components(Y)
+    if len(scc_Y) > 1:
+        return False
+    scc_X = Gs.get_strongly_connected_components(X)
+    if len(scc_X) > 1:
+        return False
+    pp_X = Gs.get_possible_parents(X, gamma)
+    pp_Y = Gs.get_possible_parents(Y, 0)
+    if bool(set.intersection(pp_X, pp_Y)):
+        return False
+    confounded_adjacencies_Y = Gs.get_confounded_adjacencies(Y)
+    ancestors_Y = Gs.get_ancestors(Y)
+    if bool(set.intersection(confounded_adjacencies_Y, ancestors_Y)):
+        return False
+    confounded_adjacencies_X = Gs.get_confounded_adjacencies(X)
+    if bool(set.intersection(confounded_adjacencies_X, ancestors_Y)):
+        return False
+    return True
 
 
 # def is_active(sg, path, adjustment_set = set()):
