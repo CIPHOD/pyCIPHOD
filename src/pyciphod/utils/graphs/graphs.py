@@ -173,9 +173,6 @@ class Graph:
         for vertex_i in vertices:
             for vertex_j in self.get_children(vertex_i):
                 self.remove_directed_edge(vertex_i, vertex_j)
-            for vertex_j in self.get_confounded_adjacencies(vertex_i):
-                self.remove_confounded_edge(vertex_i, vertex_j)
-                self.remove_confounded_edge(vertex_j, vertex_i)
 
     def is_pointed_edge(self, vertex_i: Hashable, vertex_j: Hashable) -> bool:
         try:
@@ -379,13 +376,17 @@ class Graph:
     def get_non_descendants(self, vertex: Hashable) -> set:
         return self.get_vertices().difference(self.get_descendants(vertex))
 
-    def get_confounded_adjacencies(self, vertex: Hashable) -> list:
-        """
-        TODO
-        :param vertex:
-        :return:
-        """
-        return set(self._confounded_g.adj)
+    def get_confounded_adjacencies(self, vertex: Hashable) -> set:
+        '''
+        Returns the set of vertices adjacent to the vertex in parameter through confounded edges.
+        
+        :param self: Graph of interest
+        :param vertex: Vertex of interest
+        :type vertex: Hashable
+        :return: Set of adjacent vertices through confounded edges.
+        :rtype: set
+        '''
+        return set(self._confounded_g.adj[vertex])
         # confounded_adjacencies = []
         # for potential_adj in self._g.pred[vertex]:
         #     for idx in self._g.pred[vertex][potential_adj]:
