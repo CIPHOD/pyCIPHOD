@@ -12,10 +12,10 @@ ALL_CELLS = pd.MultiIndex.from_product(
 )
 
 METHOD_LABELS = {
-    "basic_mcar_recovery": "MCAR recovery",
-    "mar_ipw_recovery": "MAR recovery",
-    "mnar_recovery_mp_dag": "MNAR recovery with DAG",
-    "mnar_recovery_sva_cmcdmg": "MNAR with cm-CDMG",
+    "basic_mcar_recovery": "Méthode MCAR",
+    "mar_ipw_recovery": "Méthode  MAR",
+    "mnar_recovery_mp_dag": "Méthode MNAR avec un DAG",
+    "mnar_recovery_sva_cmcdmg": "Méthode MNAR avec un cluster graph",
 }
 
 
@@ -802,11 +802,11 @@ def plot_tv_convergence(summary, setting_label=None):
 
     ax.set_xscale("log")
     ax.set_xlabel("Sample size")
-    ax.set_ylabel("Normalized total variation distance")
+    ax.set_ylabel("Distance en variation totale")
     ax.set_title(
-        "Recovery of the full joint distribution"
-        if setting_label is None
-        else f"Recovery of the full joint distribution — {setting_label}"
+        "Récuperation de la distribution jointe"
+        # if setting_label is None
+        # else f"Recovery of the full joint distribution — {setting_label}"
     )
     ax.legend()
     ax.grid(True, alpha=0.3)
@@ -816,7 +816,7 @@ def plot_tv_convergence(summary, setting_label=None):
 
 
 if __name__ == "__main__":
-    setting = 1  # 1 is a DAG with MCAR, MAR, and MNAR missingness; 2 is a DAG with MAR and MNAR missingness
+    setting = 2  # 1 is a DAG with MCAR, MAR, and MNAR missingness; 2 is a DAG with MAR and MNAR missingness
 
     if setting == 1:
         results, summary = convergence_experiment(setting=1)
