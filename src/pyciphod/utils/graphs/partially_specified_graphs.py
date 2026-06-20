@@ -1,6 +1,7 @@
 from pyciphod.utils.graphs.graphs import Graph, DirectedAcyclicGraph, DirectedMixedGraph, AcyclicDirectedMixedGraph
 from pyciphod.utils.graphs.meek_rules import meek_rule_1, meek_rule_2, meek_rule_3
-
+from typing import Hashable
+from pyciphod.utils.time_series.data_format import DTimeVar
 
 class PartiallySpecifiedGraph(Graph):
     def __init__(self):
@@ -30,7 +31,21 @@ class ClusterDirectedAcyclicGraph(PartiallySpecifiedDirectedGraph, DirectedAcycl
 class SummaryCausalGraph(ClusterDirectedMixedGraph):
     def __init__(self):
         super().__init__()
+        self.lag_max = None
+    
+    def add_lag_max(self, lag_max: int) -> None:
+        self.lag_max = lag_max
 
+    def get_possible_parents(self, vertex : Hashable, gamma : int) -> set:
+        possible_parents = set()
+        parents = self.get_parents(vertex)
+        for p in parents:
+            for t in range(gamma, self.lag_max + gamma):
+                possible_parents.add(DTimeVar(p,t))
+        possible_parents.remove(DTimeVar(vertex,gamma))
+        return possible_parents
+
+        
 
 class ExtendedSummaryCausalGraph(ClusterAcyclicDirectedMixedGraph):
     def __init__(self):

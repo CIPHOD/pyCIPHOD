@@ -44,17 +44,23 @@ class FtGraph(Graph):
             summary.add_vertex(name)
 
         # Add edges to summary graph based on original graph
+        lag_max = 0
         for (u, v) in self.get_directed_edges():
             summary.add_directed_edge(u.name, v.name)
+            lag_max = max(lag_max, abs(u.time-v.time))
 
         for (u, v) in self.get_confounded_edges():
             summary.add_confounded_edge(u.name, v.name)
+            lag_max = max(lag_max, abs(u.time-v.time))
 
         for (u, v) in self.get_undirected_edges():
             summary.add_undirected_edge(u.name, v.name)
+            lag_max = max(lag_max, abs(u.time-v.time))
 
         for (u, v) in self.get_uncertain_edges():
             summary.add_uncertain_edge(u.name, v.name)
+            lag_max = max(lag_max, abs(u.time-v.time))
+        summary.add_lag_max(lag_max)
 
         return summary
 
