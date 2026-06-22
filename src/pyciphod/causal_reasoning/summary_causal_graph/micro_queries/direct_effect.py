@@ -1,6 +1,5 @@
 from pyciphod.utils.graphs.partially_specified_graphs import SummaryCausalGraph
 from typing import Hashable
-import networkx as nx
 
 def CDE_is_identifiable(Gs: SummaryCausalGraph, X : Hashable, Y : Hashable, gamma : int) -> bool:
     '''
