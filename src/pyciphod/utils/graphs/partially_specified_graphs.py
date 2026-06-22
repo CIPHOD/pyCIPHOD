@@ -40,9 +40,9 @@ class SummaryCausalGraph(ClusterDirectedMixedGraph):
         possible_parents = set()
         parents = self.get_parents(vertex)
         for p in parents:
-            for t in range(gamma, self.lag_max + gamma):
-                possible_parents.add(DTimeVar(p,t))
-        possible_parents.remove(DTimeVar(vertex,gamma))
+            for t in range(0, self.lag_max + 1):
+                possible_parents.add(DTimeVar(p,gamma + t))
+        possible_parents.discard(DTimeVar(vertex,gamma))
         return possible_parents
 
         
