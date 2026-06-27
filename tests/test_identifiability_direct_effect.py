@@ -12,8 +12,9 @@ def test_CDE():
     Gs.add_directed_edges_from([('X','Y'),('X','W'),('W','Y'),('Y','W')])
     Gs.add_directed_edges_from([('X','X'),('W','W'),('Y','Y')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert (not CDE_is_identifiable(Gs, 'X', 'Y', 0)) and (not CDE_is_identifiable(Gs, 'X', 'Y', 1))
+    #Gs.draw_graph()
+    assert (not CDE_is_identifiable(Gs, 'X', 'Y', 0))
+    assert (not CDE_is_identifiable(Gs, 'X', 'Y', 1))
 
 
     #Fig 2
@@ -24,8 +25,9 @@ def test_CDE():
     Gs.add_confounded_edges_from([('W','Y')])
     Gs.add_confounded_edges_from([('W','W'),('Y','Y')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert (not CDE_is_identifiable(Gs, 'X', 'Y', 0)) and (not CDE_is_identifiable(Gs, 'X', 'Y', 1))
+    #Gs.draw_graph()
+    assert (not CDE_is_identifiable(Gs, 'X', 'Y', 0)) 
+    assert (not CDE_is_identifiable(Gs, 'X', 'Y', 1))
 
     #Fig 3
     Gs = SummaryCausalGraph()
@@ -33,8 +35,9 @@ def test_CDE():
     Gs.add_directed_edges_from([('X','Y'),('X','W'),('W','X'),('W','Y')])
     Gs.add_directed_edges_from([('X','X'),('W','W'),('Y','Y')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert CDE_is_identifiable(Gs, 'X', 'Y', 0) and CDE_is_identifiable(Gs, 'X', 'Y', 1)
+    #Gs.draw_graph()
+    assert CDE_is_identifiable(Gs, 'X', 'Y', 0) 
+    assert CDE_is_identifiable(Gs, 'X', 'Y', 1)
 
     #Fig 4
     Gs = SummaryCausalGraph()
@@ -44,8 +47,9 @@ def test_CDE():
     Gs.add_confounded_edges_from([('W','X')])
     Gs.add_confounded_edges_from([('X','X'),('W','W')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert CDE_is_identifiable(Gs, 'X', 'Y', 0) and CDE_is_identifiable(Gs, 'X', 'Y', 1)
+    #Gs.draw_graph()
+    assert CDE_is_identifiable(Gs, 'X', 'Y', 0) 
+    assert CDE_is_identifiable(Gs, 'X', 'Y', 1)
 
     #Fig 5.a
     Gs = SummaryCausalGraph()
@@ -55,8 +59,9 @@ def test_CDE():
     Gs.add_confounded_edges_from([('W','X'),('X','Z')])
     Gs.add_confounded_edges_from([('X','X'),('Z','Z')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert CDE_is_identifiable(Gs, 'X', 'Y', 0) and CDE_is_identifiable(Gs, 'X', 'Y', 1)
+    #Gs.draw_graph()
+    assert CDE_is_identifiable(Gs, 'X', 'Y', 0) 
+    assert CDE_is_identifiable(Gs, 'X', 'Y', 1)
 
     #Fig 5.b
     Gs = SummaryCausalGraph()
@@ -65,8 +70,9 @@ def test_CDE():
     Gs.add_directed_edges_from([('X','X'),('W','W'),('Y','Y'),('Z','Z')])
     Gs.add_confounded_edges_from([('W','Z')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert CDE_is_identifiable(Gs, 'X', 'Y', 0) and CDE_is_identifiable(Gs, 'X', 'Y', 1)
+    #Gs.draw_graph()
+    assert CDE_is_identifiable(Gs, 'X', 'Y', 0) 
+    assert CDE_is_identifiable(Gs, 'X', 'Y', 1)
 
     #Fig 5.c
     Gs = SummaryCausalGraph()
@@ -75,8 +81,9 @@ def test_CDE():
     Gs.add_directed_edges_from([('W','W'),('Y','Y'),('Z','Z')])
     Gs.add_confounded_edges_from([('W','Z')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert CDE_is_identifiable(Gs, 'X', 'Y', 0) and CDE_is_identifiable(Gs, 'X', 'Y', 1)
+    #Gs.draw_graph()
+    assert CDE_is_identifiable(Gs, 'X', 'Y', 0) 
+    assert CDE_is_identifiable(Gs, 'X', 'Y', 1)
 
     #Fig 6
     Gs = SummaryCausalGraph()
@@ -84,8 +91,9 @@ def test_CDE():
     Gs.add_directed_edges_from([('X','Y'),('A','Y'),('E','Y'),('X','A'),('A','X'),('X','E'),('E','X')])
     Gs.add_directed_edges_from([('A','A'),('Y','Y'),('E','E'),('X','X')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert CDE_is_identifiable(Gs, 'X', 'Y', 0) and CDE_is_identifiable(Gs, 'X', 'Y', 1)
+    #Gs.draw_graph()
+    assert CDE_is_identifiable(Gs, 'X', 'Y', 0) 
+    assert CDE_is_identifiable(Gs, 'X', 'Y', 1)
 
 
 def test_NDE():
@@ -99,8 +107,9 @@ def test_NDE():
     Gs.add_directed_edges_from([('X','Y'),('X','W'),('W','Y'),('Y','W')])
     Gs.add_directed_edges_from([('X','X'),('W','W'),('Y','Y')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 0)) and (not NDE_is_identifiable(Gs, 'X', 'Y', 1))
+    #Gs.draw_graph()
+    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 0)) 
+    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 1))
 
 
     #Fig 2
@@ -111,8 +120,9 @@ def test_NDE():
     Gs.add_confounded_edges_from([('W','Y')])
     Gs.add_confounded_edges_from([('W','W'),('Y','Y')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 0)) and (not NDE_is_identifiable(Gs, 'X', 'Y', 1))
+    #Gs.draw_graph()
+    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 0)) 
+    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 1))
 
     #Fig 3
     Gs = SummaryCausalGraph()
@@ -120,8 +130,9 @@ def test_NDE():
     Gs.add_directed_edges_from([('X','Y'),('X','W'),('W','X'),('W','Y')])
     Gs.add_directed_edges_from([('X','X'),('W','W'),('Y','Y')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 0)) and (not NDE_is_identifiable(Gs, 'X', 'Y', 1))
+    #Gs.draw_graph()
+    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 0)) 
+    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 1))
 
     #Fig 4
     Gs = SummaryCausalGraph()
@@ -131,8 +142,9 @@ def test_NDE():
     Gs.add_confounded_edges_from([('W','X')])
     Gs.add_confounded_edges_from([('X','X'),('W','W')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 0)) and (not NDE_is_identifiable(Gs, 'X', 'Y', 1))
+    #Gs.draw_graph()
+    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 0)) 
+    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 1))
 
     #Fig 5.a
     Gs = SummaryCausalGraph()
@@ -142,8 +154,9 @@ def test_NDE():
     Gs.add_confounded_edges_from([('W','X'),('X','Z')])
     Gs.add_confounded_edges_from([('X','X'),('Z','Z')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 0)) and (not NDE_is_identifiable(Gs, 'X', 'Y', 1))
+    #Gs.draw_graph()
+    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 0)) 
+    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 1))
 
     #Fig 5.b
     Gs = SummaryCausalGraph()
@@ -152,8 +165,9 @@ def test_NDE():
     Gs.add_directed_edges_from([('X','X'),('W','W'),('Y','Y'),('Z','Z')])
     Gs.add_confounded_edges_from([('W','Z')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 0)) and NDE_is_identifiable(Gs, 'X', 'Y', 1)
+    #Gs.draw_graph()
+    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 0))
+    assert NDE_is_identifiable(Gs, 'X', 'Y', 1)
 
     #Fig 5.c
     Gs = SummaryCausalGraph()
@@ -162,8 +176,9 @@ def test_NDE():
     Gs.add_directed_edges_from([('W','W'),('Y','Y'),('Z','Z')])
     Gs.add_confounded_edges_from([('W','Z')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert NDE_is_identifiable(Gs, 'X', 'Y', 0) and NDE_is_identifiable(Gs, 'X', 'Y', 1)
+    #Gs.draw_graph()
+    assert NDE_is_identifiable(Gs, 'X', 'Y', 0) 
+    assert NDE_is_identifiable(Gs, 'X', 'Y', 1)
 
     #Fig 6
     Gs = SummaryCausalGraph()
@@ -171,8 +186,9 @@ def test_NDE():
     Gs.add_directed_edges_from([('X','Y'),('A','Y'),('E','Y'),('X','A'),('A','X'),('X','E'),('E','X')])
     Gs.add_directed_edges_from([('A','A'),('Y','Y'),('E','E'),('X','X')])
     Gs.add_lag_max(1)
-    Gs.draw_graph()
-    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 0)) and (not NDE_is_identifiable(Gs, 'X', 'Y', 1))
+    #Gs.draw_graph()
+    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 0)) 
+    assert (not NDE_is_identifiable(Gs, 'X', 'Y', 1))
 
 if __name__ == "__main__":
     test_CDE()

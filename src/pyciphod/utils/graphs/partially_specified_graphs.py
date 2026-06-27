@@ -31,18 +31,22 @@ class ClusterDirectedAcyclicGraph(PartiallySpecifiedDirectedGraph, DirectedAcycl
 class SummaryCausalGraph(ClusterDirectedMixedGraph):
     def __init__(self):
         super().__init__()
-        self.lag_max = None
+        self._lag_max = None
     
     def add_lag_max(self, lag_max: int) -> None:
-        self.lag_max = lag_max
+        self._lag_max = lag_max
+
+    def get_lag_max(self) -> int:
+        return self._lag_max
 
     def get_possible_parents(self, vertex : Hashable, gamma : int) -> set:
         possible_parents = set()
         parents = self.get_parents(vertex)
+        lag_max = self.get_lag_max()
         for p in parents:
-            for t in range(gamma, self.lag_max + gamma):
-                possible_parents.add(DTimeVar(p,t))
-        possible_parents.remove(DTimeVar(vertex,gamma))
+            for t in range(0, lag_max + 1):
+                possible_parents.add(DTimeVar(p,gamma + t))
+        possible_parents.discard(DTimeVar(vertex,gamma))
         return possible_parents
 
         
