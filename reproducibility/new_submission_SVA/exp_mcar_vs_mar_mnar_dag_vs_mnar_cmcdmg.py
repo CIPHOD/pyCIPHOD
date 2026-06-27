@@ -4,6 +4,9 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
+from pyciphod.causal_estimation.outcome_regression import GComputation
+
+
 VARIABLES = ["Z1", "Z2","X1", "X2", "Y1"]
 
 ALL_CELLS = pd.MultiIndex.from_product(
@@ -12,10 +15,10 @@ ALL_CELLS = pd.MultiIndex.from_product(
 )
 
 METHOD_LABELS = {
-    "basic_mcar_recovery": "Méthode MCAR",
-    "mar_ipw_recovery": "Méthode  MAR",
-    "mnar_recovery_mp_dag": "Méthode MNAR avec un DAG",
-    "mnar_recovery_sva_cmcdmg": "Méthode MNAR avec un cluster graph",
+    "basic_mcar_recovery": "MCAR recovery",
+    "mar_ipw_recovery": "MAR recovery",
+    "mnar_recovery_mp_dag": "MNAR-DAG recovery",
+    "mnar_recovery_sva_cmcdmg": "MNAR-cm-C-DMG recovery",
 }
 
 
@@ -601,7 +604,6 @@ def recover_joint_distribution_mar_ipw(data):
     )
     p_complete_given_z = (counts["sum"] + 0.5) / (counts["size"] + 2.0 * 0.5)
 
-
     if p_complete_given_z.isna().any():
         raise ValueError(
             "Some Z1,Z2 strata are absent from the sample."
@@ -646,13 +648,44 @@ def recover_joint_distribution_mar_ipw(data):
         .reindex(ALL_CELLS, fill_value=0.0)
         .rename("mar_recovery")
     )
-
     return recovered
 
 
 def total_variation(p, q):
     return 0.5 * np.abs(p - q).sum()
 
+
+def compute_ground_truth(setting=1):
+    def p_y_do(x1, x2):
+        if setting == 1:
+            return expit(-0.9 + 1.8 * x1 + 0.3 * x2)
+        else:
+            return expit(-0.9 + 1.8 * x1 + 0.3 * x2)
+
+    joint_effect = p_y_do(1, 1) - p_y_do(0, 0)
+    return float(joint_effect)
+
+def effect_from_joint_distribution(joint):
+    """
+    joint is a Series indexed by:
+    Z1, Z2, X1, X2, Y1
+    containing probabilities.
+    """
+
+    joint = joint / joint.sum()
+
+    def p_y1_given_x(x1, x2):
+        subset = joint.xs((x1, x2), level=("X1", "X2"))
+
+        numerator = subset.xs(1, level="Y1").sum()
+        denominator = subset.sum()
+
+        if denominator <= 0:
+            raise ValueError(f"No mass for X1={x1}, X2={x2}")
+
+        return numerator / denominator
+
+    return p_y1_given_x(1, 1) - p_y1_given_x(0, 0)
 
 def compare_recovery_methods(data, truth, setting=1):
     if setting == 1:
@@ -680,39 +713,59 @@ def compare_recovery_methods(data, truth, setting=1):
 
     rows = []
 
+    ground_truth_effect = compute_ground_truth(setting=setting)
+
     for method, estimate in estimates.items():
         mass = estimate.sum()
-
-        if not np.isfinite(mass) or mass <= 0:
-            raise ValueError(
-                f"Invalid recovered mass for {method}."
-            )
-
         normalized_estimate = estimate / mass
+
+        causal_effect_estimate = effect_from_joint_distribution(normalized_estimate)
 
         rows.append({
             "method": method,
-
-            # Original, unnormalized recovered mass
             "recovered_mass": mass,
-
             "mass_error": abs(mass - 1.0),
-
-            # Fair comparison of distributional shape
-            "normalized_tv": (
-                0.5
-                * np.abs(normalized_estimate - truth).sum()
-            ),
-
-            # Includes both shape and mass discrepancies
-            "raw_l1_error": (
-                np.abs(estimate - truth).sum()
-            ),
-
-            "maximum_normalized_cell_error": (
-                np.abs(normalized_estimate - truth).max()
-            ),
+            "normalized_tv": 0.5 * np.abs(normalized_estimate - truth).sum(),
+            "raw_l1_error": np.abs(estimate - truth).sum(),
+            "maximum_normalized_cell_error": np.abs(normalized_estimate - truth).max(),
+            "causal_effect_estimate": causal_effect_estimate,
+            "causal_effect_error": abs(causal_effect_estimate - ground_truth_effect),
         })
+
+
+    # for method, estimate in estimates.items():
+    #     mass = estimate.sum()
+    #
+    #     if not np.isfinite(mass) or mass <= 0:
+    #         raise ValueError(
+    #             f"Invalid recovered mass for {method}."
+    #         )
+    #
+    #     normalized_estimate = estimate / mass
+    #
+    #     rows.append({
+    #         "method": method,
+    #
+    #         # Original, unnormalized recovered mass
+    #         "recovered_mass": mass,
+    #
+    #         "mass_error": abs(mass - 1.0),
+    #
+    #         # Fair comparison of distributional shape
+    #         "normalized_tv": (
+    #             0.5
+    #             * np.abs(normalized_estimate - truth).sum()
+    #         ),
+    #
+    #         # Includes both shape and mass discrepancies
+    #         "raw_l1_error": (
+    #             np.abs(estimate - truth).sum()
+    #         ),
+    #
+    #         "maximum_normalized_cell_error": (
+    #             np.abs(normalized_estimate - truth).max()
+    #         ),
+    #     })
 
     return pd.DataFrame(rows)
 
@@ -779,9 +832,63 @@ def convergence_experiment(setting=1, sample_sizes=(1000, 5000, 10000, 50000, 10
                 "maximum_normalized_cell_error",
                 "mean",
             ),
+
+            # New: causal-effect estimation
+            mean_causal_effect_estimate=(
+                "causal_effect_estimate",
+                "mean",
+            ),
+            sd_causal_effect_estimate=(
+                "causal_effect_estimate",
+                "std",
+            ),
+            mean_causal_effect_error=(
+                "causal_effect_error",
+                "mean",
+            ),
+            sd_causal_effect_error=(
+                "causal_effect_error",
+                "std",
+            ),
         )
         .reset_index()
     )
+
+    # summary = (
+    #     results
+    #     .groupby(["n", "method"])
+    #     .agg(
+    #         mean_recovered_mass=(
+    #             "recovered_mass",
+    #             "mean",
+    #         ),
+    #         sd_recovered_mass=(
+    #             "recovered_mass",
+    #             "std",
+    #         ),
+    #         mean_mass_error=(
+    #             "mass_error",
+    #             "mean",
+    #         ),
+    #         mean_normalized_tv=(
+    #             "normalized_tv",
+    #             "mean",
+    #         ),
+    #         sd_normalized_tv=(
+    #             "normalized_tv",
+    #             "std",
+    #         ),
+    #         mean_raw_l1_error=(
+    #             "raw_l1_error",
+    #             "mean",
+    #         ),
+    #         mean_maximum_cell_error=(
+    #             "maximum_normalized_cell_error",
+    #             "mean",
+    #         ),
+    #     )
+    #     .reset_index()
+    # )
 
     return results, summary
 
@@ -802,12 +909,80 @@ def plot_tv_convergence(summary, setting_label=None):
 
     ax.set_xscale("log")
     ax.set_xlabel("Sample size")
-    ax.set_ylabel("Distance en variation totale")
+    ax.set_ylabel("Total variation distance")
+    # ax.set_title(
+    #     "Recovery of the joint distribution"
+    #     # if setting_label is None
+    #     # else f"Recovery of the full joint distribution — {setting_label}"
+    # )
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    fig.tight_layout()
+    plt.show()
+
+
+def plot_causal_effect_error_convergence(summary, setting_label=None):
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    for method, method_data in summary.groupby("method"):
+        method_data = method_data.sort_values("n")
+
+        ax.errorbar(
+            method_data["n"],
+            method_data["mean_causal_effect_error"],
+            yerr=method_data["sd_causal_effect_error"],
+            marker="o",
+            capsize=3,
+            label=METHOD_LABELS.get(method, method),
+        )
+
+    ax.set_xscale("log")
+    ax.set_xlabel("Sample size")
+    ax.set_ylabel("Erreur absolue sur l'effet causal")
     ax.set_title(
-        "Récuperation de la distribution jointe"
-        # if setting_label is None
-        # else f"Recovery of the full joint distribution — {setting_label}"
+        "Estimation de l'effet causal"
+        if setting_label is None
+        else f"Estimation de l'effet causal — {setting_label}"
     )
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+    fig.tight_layout()
+    plt.show()
+
+
+def plot_causal_effect_estimates(summary, setting_label=None):
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    ground_truth_effect = compute_ground_truth(setting=setting)
+
+    for method, method_data in summary.groupby("method"):
+        method_data = method_data.sort_values("n")
+
+        ax.errorbar(
+            method_data["n"],
+            method_data["mean_causal_effect_estimate"],
+            yerr=method_data["sd_causal_effect_estimate"],
+            marker="o",
+            capsize=3,
+            label=METHOD_LABELS.get(method, method),
+        )
+
+    ax.axhline(
+        ground_truth_effect,
+        linestyle="--",
+        label="Ground truth"
+    )
+
+    ax.set_xscale("log")
+    ax.set_xlabel("Sample size")
+    ax.set_ylabel("Estimated causal effect")
+    # ax.set_title(
+    #     "Estimated causal effect"
+    #     if setting_label is None
+    #     else f"Estimated causal effect — {setting_label}"
+    # )
     ax.legend()
     ax.grid(True, alpha=0.3)
 
@@ -825,5 +1000,5 @@ if __name__ == "__main__":
     print(summary)
 
     plot_tv_convergence(summary, setting_label=f"Setting {setting}")
-
+    plot_causal_effect_estimates(summary, setting_label=f"Setting {setting}")
 
