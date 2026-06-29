@@ -11,6 +11,7 @@ max_delay_list = [2]
 allow_instatenous = True
 allow_unmeasured_confounding = True
 seed = 0
+
 res_CDE = []
 res_NDE = []
 for p_edge in p_edge_list:
@@ -22,14 +23,22 @@ for p_edge in p_edge_list:
         for i in range(n_graphs):
             seed += 1
             np.random.seed(seed)
-            max_delay = np.random.choice(max_delay_list) 
-            ftadmg = create_random_ft_admg(num_ts, p_edge, causally_stationnary, max_delay,
+            max_delay = np.random.choice(max_delay_list)
+            while True: #Making sure the FT-ADMG is non-empty
+                ftadmg = create_random_ft_admg(num_ts, p_edge, causally_stationnary, max_delay,
                                             allow_instatenous, allow_unmeasured_confounding, seed = seed)
+                if ftadmg.get_directed_edges():
+                    break
             scg = ftadmg.get_summary_causal_graph()
             vertices = list(scg.get_vertices())
-            X = np.random.choice(vertices)
-            Y = np.random.choice(vertices)
-            gamma =  np.random.randint(0, scg.get_lag_max() + 1)
+            while True: #Making sure the outcome has a possible parent
+                Y = np.random.choice(vertices)
+                pp_Yt = scg.get_possible_parents(Y,0)
+                if pp_Yt:
+                    break
+            X_gamma = np.random.choice(pp_Yt)
+            X,gamma = X_gamma.get_name(), X_gamma.get_time()
+
             if CDE_is_identifiable(scg, X, Y, gamma):
                 res_CDE_2 += 1
             if NDE_is_identifiable(scg, X, Y, gamma):

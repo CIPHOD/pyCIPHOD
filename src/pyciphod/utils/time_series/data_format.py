@@ -16,6 +16,12 @@ class TimeVar:
         if not isinstance(self.time, int) and not isinstance(self.time, float):
             raise TypeError(f"time must be int or float, got {type(self.time).__name__}")
 
+    def get_name(self):
+        return self.name
+    
+    def get_time(self):
+        return self.time
+
 
 @dataclass (frozen=True, order=True)
 class DTimeVar(TimeVar):

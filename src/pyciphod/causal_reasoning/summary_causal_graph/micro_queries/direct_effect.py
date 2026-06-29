@@ -1,5 +1,6 @@
 from pyciphod.utils.graphs.partially_specified_graphs import SummaryCausalGraph
 from typing import Hashable
+from pyciphod.utils.time_series.data_format import DTimeVar
 
 def CDE_is_identifiable(Gs: SummaryCausalGraph, X : Hashable, Y : Hashable, gamma : int) -> bool:
     '''
@@ -17,7 +18,9 @@ def CDE_is_identifiable(Gs: SummaryCausalGraph, X : Hashable, Y : Hashable, gamm
     :return: Boolean describing whether the Controlled Direct Effect is identifiable or not
     :rtype: bool
     '''
-
+    
+    if DTimeVar(X,gamma) not in Gs.get_possible_parents(Y,0):
+        return True
     scc_Y = Gs.get_strongly_connected_components(Y)
     if len(scc_Y) > 1:
         return False
@@ -44,6 +47,8 @@ def NDE_is_identifiable(Gs: SummaryCausalGraph, X : Hashable, Y : Hashable, gamm
     :rtype: bool
     '''
 
+    if DTimeVar(X,gamma) not in Gs.get_possible_parents(Y,0):
+        return True
     scc_Y = Gs.get_strongly_connected_components(Y)
     if len(scc_Y) > 1:
         return False
