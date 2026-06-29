@@ -33,16 +33,16 @@ for p_edge in p_edge_list:
                 seed += 1
                 print("debug 1")
             scg = ftadmg.get_summary_causal_graph()
+            scg.add_lag_max(max_delay)
             vertices = list(scg.get_vertices())
             while True: #Making sure the outcome has a possible parent
                 Y = np.random.choice(vertices)
                 pp_Yt = scg.get_possible_parents(Y,0)
                 if pp_Yt:
                     break
-                print(Y,pp_Yt)
-                scg.draw_graph()
                 seed += 1
                 np.random.seed(seed)
+                print("debug 2")
             X_gamma = np.random.choice(list(pp_Yt))
             X,gamma = X_gamma.get_name(), X_gamma.get_time()
 
