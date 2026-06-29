@@ -30,6 +30,7 @@ for p_edge in p_edge_list:
                                             allow_instatenous, allow_unmeasured_confounding, seed = seed)
                 if ftadmg.get_directed_edges():
                     break
+                seed += 1
             scg = ftadmg.get_summary_causal_graph()
             vertices = list(scg.get_vertices())
             while True: #Making sure the outcome has a possible parent
