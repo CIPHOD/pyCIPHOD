@@ -30,6 +30,7 @@ for p_edge in p_edge_list:
                                             allow_instatenous, allow_unmeasured_confounding, seed = seed)
                 if ftadmg.get_directed_edges():
                     break
+                seed += 1
                 print("debug 1")
             scg = ftadmg.get_summary_causal_graph()
             vertices = list(scg.get_vertices())
@@ -38,6 +39,8 @@ for p_edge in p_edge_list:
                 pp_Yt = scg.get_possible_parents(Y,0)
                 if pp_Yt:
                     break
+                seed += 1
+                np.random.seed(seed)
                 print("debug 2")
             X_gamma = np.random.choice(list(pp_Yt))
             X,gamma = X_gamma.get_name(), X_gamma.get_time()
