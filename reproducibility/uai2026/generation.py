@@ -21,6 +21,7 @@ for p_edge in p_edge_list:
         res_CDE_2 = 0
         res_NDE_2 = 0
         for i in range(n_graphs):
+            print(f"p_edge={p_edge}, num_ts={num_ts}, {i}/{n_graphs}")
             seed += 1
             np.random.seed(seed)
             max_delay = np.random.choice(max_delay_list)
