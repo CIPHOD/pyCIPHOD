@@ -1,11 +1,11 @@
 import sys 
 import argparse, csv, time
 
-from src.iperi import IPeri
-from src.client import Client
-import src.utils as utils
-from src.dataset import Dataset
-import ges
+from pyciphod.causal_discovery.federated.regret_based.iperi.iperi import IPeri
+from pyciphod.causal_discovery.federated.regret_based.iperi.client import Client
+import pyciphod.causal_discovery.federated.regret_based.iperi.utils as utils
+from reproducibility.icml2026.dataset import Dataset
+import pyciphod.causal_discovery.federated.regret_based.ges as ges
 
 import networkx as nx
 import numpy as np

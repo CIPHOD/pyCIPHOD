@@ -2,10 +2,10 @@ from typing import List, Optional
 
 import numpy as np
 
-from src.client import Client
-from src.score import IPeriScore
-import src.utils as utils
-import ges
+from src.PyCIPHOD.causal_discovery.federated.regret_based.iperi.client import Client
+from src.PyCIPHOD.causal_discovery.federated.regret_based.iperi.score import IPeriScore
+import src.PyCIPHOD.causal_discovery.federated.regret_based.iperi.utils as utils
+import src.PyCIPHOD.causal_discovery.federated.regret_based.ges as ges
 
 class IPeri:
     def __init__(

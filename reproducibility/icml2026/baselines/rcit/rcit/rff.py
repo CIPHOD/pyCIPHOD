@@ -7,7 +7,7 @@ import scipy as sp
 import numpy as np
 from typing import Optional, TypedDict
 
-from rcit.rcit.utils import normalize
+from reproducibility.icml2026.baselines.rcit.rcit.utils import normalize
 
 
 class RandomFourierFeatures(TypedDict):

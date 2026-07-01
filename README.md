@@ -6,7 +6,17 @@
 - This package is under active development: not all functionalities are available
 - Disclaimer: This package is under development and may change. Use with caution applications.
 
+## Installation 
 
+```bash
+pip install .
+```
+
+For development mode:
+
+```bash
+pip install -e .
+```
 
 ## Introduction
 

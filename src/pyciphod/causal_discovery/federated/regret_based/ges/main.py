@@ -60,8 +60,8 @@ Additional modules / packages:
 """
 
 import numpy as np
-import ges.utils as utils
-from ges.scores.gauss_obs_l0_pen import GaussObsL0Pen
+import pyciphod.causal_discovery.federated.regret_based.ges.utils as utils
+from pyciphod.causal_discovery.federated.regret_based.ges.scores.gauss_obs_l0_pen import GaussObsL0Pen
 
 
 def fit_bic(

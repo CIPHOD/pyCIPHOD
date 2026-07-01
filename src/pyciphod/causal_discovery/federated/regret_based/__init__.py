@@ -1,2 +1,2 @@
-from src.iperi import IPeri
-from src.client import Client
+# from iperi.iperi import IPeri
+# from iperi.client import Client

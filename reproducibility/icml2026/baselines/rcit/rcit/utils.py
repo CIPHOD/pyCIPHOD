@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: MIT
 
 import numpy as np
-from rcit.internal_momentchi2 import hbe, sw, lpb4
+from reproducibility.icml2026.baselines.rcit.internal_momentchi2 import hbe, sw, lpb4
 
-from rcit.rcit import ApproxMethod
+from reproducibility.icml2026.baselines.rcit.rcit import ApproxMethod
 
 
 def compute_p_value_from_covariance(

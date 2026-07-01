@@ -1,16 +1,15 @@
 from typing import Optional
 
 import os 
-import json
 import copy, random, math
 import numpy as np 
 import pandas as pd 
 import networkx as nx
 import igraph as ig
-import src.utils as utils
+import pyciphod.causal_discovery.federated.regret_based.iperi.utils as utils
 
-from ges.utils import dag_to_cpdag
-from src.utils import cpdag_to_ucpdag
+from pyciphod.causal_discovery.federated.regret_based.ges.utils import dag_to_cpdag
+from pyciphod.causal_discovery.federated.regret_based.iperi.utils import cpdag_to_ucpdag
 
 
 CLIENT_SAMPLE_SIZE = [500, 1000, 2000]

@@ -10,8 +10,8 @@ from typing import Optional, TypedDict
 
 
 from . import ApproxMethod
-from rcit.rcit.utils import compute_p_value_from_covariance
-from rcit.rcit.rff import compute_normalized_rff
+from reproducibility.icml2026.baselines.rcit.rcit.utils import compute_p_value_from_covariance
+from reproducibility.icml2026.baselines.rcit.rcit.rff import compute_normalized_rff
 
 
 class TestResult(TypedDict):

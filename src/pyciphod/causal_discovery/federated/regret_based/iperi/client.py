@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import networkx as nx
 
-import src.utils as utils
+import src.PyCIPHOD.causal_discovery.federated.regret_based.iperi.utils as utils
 
 PEN_COEFF = 1e4
 

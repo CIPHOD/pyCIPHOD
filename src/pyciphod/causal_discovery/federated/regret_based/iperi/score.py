@@ -36,8 +36,8 @@ from typing import List
 
 import numpy as np
 
-from ges.scores.decomposable_score import DecomposableScore    
-from src.client import Client
+from src.PyCIPHOD.causal_discovery.federated.regret_based.ges.scores.decomposable_score import DecomposableScore    
+from src.PyCIPHOD.causal_discovery.federated.regret_based.iperi.client import Client
 
 # --------------------------------------------------------------------
 # l0-penalized Gaussian log-likelihood score for a sample from a single

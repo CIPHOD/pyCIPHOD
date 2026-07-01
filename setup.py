@@ -1,5 +1,13 @@
 from setuptools import setup, find_packages
 
+# Read dependencies from requirements.txt
+with open("requirements.txt", encoding="utf-8") as f:
+    install_requires = [
+        line.strip()
+        for line in f
+        if line.strip() and not line.startswith("#")
+    ]
+
 setup(
     name="pyciphod",
     version="0.1",
@@ -13,12 +21,5 @@ setup(
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.6",
-    install_requires=[
-        "networkx>0",
-        "numpy",
-        "pandas",
-        "scikit-learn",
-        "matplotlib",
-        "seaborn"
-    ],
+    install_requires=install_requires,
 )
