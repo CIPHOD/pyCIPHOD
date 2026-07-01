@@ -4,10 +4,3 @@ pandas
 scikit-learn
 matplotlib
 seaborn
-igraph
-torch
-tensorflow
-causal-learn
-notears
-mlxtend
-causaldag

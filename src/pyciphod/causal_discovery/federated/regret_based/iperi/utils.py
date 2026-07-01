@@ -14,8 +14,6 @@ from sklearn.preprocessing import MinMaxScaler
 
 from causallearn.search.ConstraintBased.PC import pc
 from causallearn.search.FCMBased import lingam
-from pyciphod.causal_discovery.federated.regret_based.notears.linear import notears_linear
-from pyciphod.causal_discovery.federated.regret_based.notears.nonlinear import NotearsMLP, notears_nonlinear
 import pyciphod.causal_discovery.federated.regret_based.ges as ges
 
 from sklearn.metrics import f1_score
@@ -47,24 +45,8 @@ def get_cd_function(cd_function: str, linear: bool = True):
        return lambda data: lingam_wrapper(data)
     elif cd_function == 'ges':
        return lambda data : ges.fit_bic(data, phases=['forward', 'backward'])[0]
-    elif cd_function == 'notears':
-       return lambda data: notears_wrapper(data, linear)
     else:
        raise ValueError(f"Unknown cd function: {cd_function}")
-    
-
-""" NOTEARS wrapper """
-def notears_wrapper(data: np.ndarray, linear: bool = True):
-   if linear:
-       graph = notears_linear(data, lambda1=0.0, loss_type='l2', max_iter=1000)
-   else: 
-       n = data.shape[1]
-       model = NotearsMLP(dims=[n, n*2, 1])
-       scaler = MinMaxScaler()
-       data = scaler.fit_transform(data)
-       graph = notears_nonlinear(model, data.astype(np.float32), lambda1=0.0, max_iter=200)
-   graph = np.where(graph != 0, 1, 0)  # Binarize the adjacency matrix
-   return graph
     
 
 """ LiNGAM wrapper """

@@ -43,8 +43,14 @@ include = ["pyciphod*", "reproducibility*"]
 reproducibility = [
   "scipy",
   "statsmodels",
-  "causal-learn"
+  "causal-learn",
+  "igraph", 
+  "torch",
+  "tensorflow",
+  "mlxtend",
+  "causaldag"
 ]
+
 dev = [
   "pytest"
 ]
