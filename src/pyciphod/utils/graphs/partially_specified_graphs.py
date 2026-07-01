@@ -1,5 +1,5 @@
 from pyciphod.utils.graphs.graphs import Graph, DirectedAcyclicGraph, DirectedMixedGraph, AcyclicDirectedMixedGraph
-from pyciphod.utils.graphs.meek_rules import meek_rule_1, meek_rule_2, meek_rule_3
+from pyciphod.utils.graphs.orientation_rules import meek_rule_1, meek_rule_2, meek_rule_3
 from typing import Hashable
 from pyciphod.utils.time_series.data_format import DTimeVar
 
@@ -79,7 +79,11 @@ class CompletedPartiallyDirectedAcyclicGraph(PartiallyDirectedGraphs):
 class TemporalPartiallyDirectedAcyclicGraph(PartiallyDirectedGraphs):
     def __init__(self):
         super().__init__()
-        
+
+
+class FtCompletedPartiallyDirectedAcyclicGraph(PartiallyDirectedGraphs):
+    def __init__(self):
+        super().__init__()
 
 class LocalEssentialGraph(PartiallyDirectedGraphs):
     def __init__(self):

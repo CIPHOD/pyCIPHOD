@@ -6,7 +6,7 @@ from itertools import combinations
 from pyciphod.causal_discovery.basic.constraint_based import ConstraintBased
 from pyciphod.causal_discovery.basic.constraint_based import PC
 from pyciphod.utils.graphs.partially_specified_graphs import LocalEssentialGraph
-from pyciphod.utils.graphs.meek_rules import meek_rule_1, meek_rule_2, meek_rule_3
+from pyciphod.utils.graphs.orientation_rules import meek_rule_1, meek_rule_2, meek_rule_3
 from pyciphod.utils.stat_tests.independence_tests import CiTests, FisherZTest as FisherZ
 from pyciphod.utils.graphs.background_knowledge import BackgroundKnowledge
 

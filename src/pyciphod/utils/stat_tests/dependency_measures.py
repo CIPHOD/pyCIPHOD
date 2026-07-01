@@ -6,6 +6,7 @@ from scipy.special import digamma
 from scipy import linalg
 from scipy.stats import invwishart, norm, truncnorm
 from typing import List, Optional, Sequence, Union
+from typing import Hashable
 
 
 class DependenceMeasures(ABC):
@@ -767,10 +768,10 @@ class CMIh(DependenceMeasures):
         # Laplace pseudocount for discrete plugin entropy (default 0 = no smoothing)
         self.discrete_alpha = float(discrete_alpha)
 
-    def _as_list(self, v: Union[str, Sequence[str], None]) -> List[str]:
+    def _as_list(self, v):
         if v is None:
             return []
-        if isinstance(v, str):
+        if isinstance(v, Hashable):
             return [v]
         return list(v)
 
@@ -952,7 +953,6 @@ class CMIh(DependenceMeasures):
             Estimated conditional mutual information.
         """
         df = self._prepare_data(df)
-
         x_cols = self._as_list(self.x)
         y_cols = self._as_list(self.y)
         z_cols = self._as_list(self.cond_list)

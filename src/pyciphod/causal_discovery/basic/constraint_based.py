@@ -4,7 +4,7 @@ import pandas as pd
 from itertools import combinations
 
 from pyciphod.utils.graphs.partially_specified_graphs import CompletedPartiallyDirectedAcyclicGraph, PartialAncestralGraphs
-from pyciphod.utils.graphs.meek_rules import meek_rule_1, meek_rule_2, meek_rule_3
+from pyciphod.utils.graphs.orientation_rules import meek_rule_1, meek_rule_2, meek_rule_3
 from pyciphod.utils.stat_tests.independence_tests import CiTests, FisherZTest as FisherZ
 from pyciphod.utils.graphs.background_knowledge import BackgroundKnowledge
 
@@ -413,7 +413,7 @@ class FCI(ConstraintBased):
                     except Exception:
                         pval = test.get_pvalue_by_permutation(data_test)
 
-                    print("FCI PDS", x, y, S, pval)
+                    # print("FCI PDS", x, y, S, pval)
 
                     if pval > self._sparsity:
                         self.g_hat.remove_uncertain_edge(x, y)

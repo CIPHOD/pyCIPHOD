@@ -248,7 +248,6 @@ class CiTests(DependenceMeasures, ABC):
                     continue
 
                 stat = self.get_dependence(df_perm)
-
                 if stat is None or pd.isna(stat):
                     continue
 
@@ -263,7 +262,6 @@ class CiTests(DependenceMeasures, ABC):
 
         if valid == 0:
             return np.nan
-
         return float((count + 1) / (valid + 1))
 
     def old_get_pvalue_by_permutation(self, df, n_permutations: int = 1000, seed: int = None):
@@ -491,8 +489,8 @@ class KernelPartialCorrelationTest(CiTests, KernelPartialCorrelation):
         Note: this can be expensive; choose n_permutations accordingly.
         """
         # Delegate to the generic permutation-based p-value estimator
-        raise NotImplementedError("KernelPartialCorrelationTest relies on get_pvalue_by_permutation for p-value estimation. Call that method directly.")
-
+        return self.get_pvalue_by_permutation(df, n_permutations=n_permutations, seed=seed)
+        # raise NotImplementedError("KernelPartialCorrelationTest relies on get_pvalue_by_permutation for p-value estimation. Call that method directly.")
 
 
 class CopulaTest(CiTests, Copula):
@@ -607,11 +605,13 @@ class CIMhTest(CiTests, CMIh):
     #     res = dep.get_dependence(df)
     #     return res
 
-    def get_pvalue(self, df, n_permutations: int = 1000, seed: int = None):
+    def get_pvalue(self, df, n_permutations: int = 10, seed: int = None):
         """Estimate a permutation p-value for the CMIh statistic using the
         generic permutation method implemented in `get_pvalue_by_permutation`.
 
         Note: this can be expensive; choose n_permutations accordingly.
         """
         # Delegate to the generic permutation-based p-value estimator
-        raise NotImplementedError("CMIhTest relies on get_pvalue_by_permutation for p-value estimation. Call that method directly.")
+        pval = self.get_pvalue_by_permutation(df, n_permutations=n_permutations, seed=seed)
+        return pval
+        # raise NotImplementedError("CMIhTest relies on get_pvalue_by_permutation for p-value estimation. Call that method directly.")

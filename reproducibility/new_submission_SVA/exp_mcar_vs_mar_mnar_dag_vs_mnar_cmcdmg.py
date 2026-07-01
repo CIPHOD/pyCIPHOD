@@ -784,6 +784,11 @@ def convergence_experiment(setting=1, sample_sizes=(1000, 5000, 10000, 50000, 10
             else:
                 data = simulate_binary_graph2(n=n, seed=100000 + 100 * repetition + n,)
 
+            r_vars = [ "RX1", "RX2", "RY1"]
+            print(data)
+            for r_var in r_vars:
+                print(f"Proportion of {r_var}=0: {1-data[r_var].mean():.4f}")
+
             method_results = compare_recovery_methods(
                 data,
                 population_truth,
