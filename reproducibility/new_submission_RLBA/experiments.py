@@ -32,8 +32,8 @@ from pyciphod.causal_discovery.difference.ts_diff_constraint_based import TsLDif
 from metrics_ts import evaluate_all_ts
 
 from baseline.MBGH import learn_ddag
-from baseline.microcause import micro_cause
-from baseline.rcd import top_k_rc, BINS
+# from baseline.microcause import micro_cause
+# from baseline.rcd import top_k_rc, BINS
 
 DEFAULT_LAGS = {
     "setting1_lag2": [2],
@@ -42,8 +42,8 @@ DEFAULT_LAGS = {
     "setting4_iid": [0, 1, 2],
 }
 
-ALGOS = ["tsldiffpc", "tsldiffpc_pc", "tsdci", "tsdci_pc", "tsMBGH", "microcause", "rcd"]
-GRAPH_ALGOS = {"tsldiffpc", "tsldiffpc_pc", "tsdci", "tsdci_pc", "tsMBGH"}
+ALGOS = ["tsldiffpc", "tsldiffpc_pc", "tsdci", "tsdci_pc", "tsMBGH", "microcause", "rcd", ]  # tsiscan
+GRAPH_ALGOS = {"tsldiffpc", "tsldiffpc_pc", "tsdci", "tsdci_pc", "tsMBGH", }  # "tsiscan"
 
 
 ####
@@ -51,6 +51,7 @@ GRAPH_ALGOS = {"tsldiffpc", "tsldiffpc_pc", "tsdci", "tsdci_pc", "tsMBGH"}
 def ensure(path: Path) -> None:
     """Create a directory if it does not already exist."""
     path.mkdir(parents=True, exist_ok=True)
+
 
 def seed_block(setting: str, p: int, n: int, rep: int, base_seed: int) -> dict[str, int]:
     """Generate reproducible random seeds for graph generation and data simulation."""
@@ -62,6 +63,7 @@ def seed_block(setting: str, p: int, n: int, rep: int, base_seed: int) -> dict[s
         "change_seed": base + 200_000,
     }
 
+
 def prf(pred: set[Any], true: set[Any]) -> dict[str, Any]:
     """Compute precision, recall, F1-score and confusion counts for set predictions."""
     tp, fp, fn = len(pred & true), len(pred - true), len(true - pred)
@@ -69,6 +71,7 @@ def prf(pred: set[Any], true: set[Any]) -> dict[str, Any]:
     recall = tp / (tp + fn) if tp + fn else 0.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
     return {"precision": precision, "recall": recall, "f1": f1, "tp": tp, "fp": fp, "fn": fn}
+
 
 def lagged(X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, user_lag: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Convert two time-series datasets into lagged representations."""
@@ -80,7 +83,9 @@ def lagged(X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, user_lag: int) -> tuple[pd.
         raise RuntimeError("Lagged input contains NaN/inf.")
     return X1, X2
 
-def run_graph(algo_name: str, X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, user_lag: int, args: argparse.Namespace) -> dict[str, Any]:
+
+def run_graph(algo_name: str, X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, user_lag: int, args: argparse.Namespace) -> \
+dict[str, Any]:
     """
     :param algo_name: name of the temporal graph algorithm to run. Supported values are tsMBGH, tsldiffpc, tsldiffpc_pc, tsdci and tsdci_pc.
     :param X1_ts: time-series dataframe from the normal regime.
@@ -88,8 +93,8 @@ def run_graph(algo_name: str, X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, user_lag
     :param user_lag: maximum lag used to construct the lagged temporal representation.
     :param args: command-line arguments containing algorithm hyperparameters.
     :return: dictionary containing the predicted directed edges, undirected edges and number of tests.
-    This function first converts both regimes into lagged dataframes. It then runs the selected temporal difference-graph algorithm. 
-    For tsMBGH, it estimates a directed difference graph with the MBGH procedure. 
+    This function first converts both regimes into lagged dataframes. It then runs the selected temporal difference-graph algorithm.
+    For tsMBGH, it estimates a directed difference graph with the MBGH procedure.
     For tsldiffpc and tsdci, it runs the corresponding constraint-based difference-graph algorithm. When the algorithm name ends with _pc, the remaining unresolved edges are further oriented using tPC on the normal regime.
     """
     X1, X2 = lagged(X1_ts, X2_ts, user_lag)
@@ -119,6 +124,9 @@ def run_graph(algo_name: str, X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, user_lag
                     oriented.add(((str(parent.name), int(parent.time)), (str(child.name), int(child.time))))
         return {"oriented": oriented, "undirected": set(), "nb_tests": 0}
 
+    if algo_name == "tsiscan":
+        return run_tsiscan(X1_ts, X2_ts, user_lag=user_lag, )
+
     if algo_name.startswith("tsldiffpc"):
         algo = TsLDiffPC(sparsity=args.sparsity, seed=args.seed, eq_test=LinearRegressionCoefficientEqualityTest)
     elif algo_name.startswith("tsdci"):
@@ -137,29 +145,72 @@ def run_graph(algo_name: str, X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, user_lag
         )
 
     pred = {
-        "oriented": {((str(u.name), int(u.time)), (str(v.name), int(v.time))) for u, v in algo.g_hat.get_directed_edges()},
-        "undirected": {((str(u.name), int(u.time)), (str(v.name), int(v.time))) for u, v in algo.g_hat.get_undirected_edges()},
+        "oriented": {((str(u.name), int(u.time)), (str(v.name), int(v.time))) for u, v in
+                     algo.g_hat.get_directed_edges()},
+        "undirected": {((str(u.name), int(u.time)), (str(v.name), int(v.time))) for u, v in
+                       algo.g_hat.get_undirected_edges()},
         "nb_tests": int(getattr(algo, "nb_ci_tests", getattr(algo, "nb_tests", 0)) or 0),
     }
     pred["nb_tests"] = max(pred["nb_tests"], base_tests)
     return pred
 
 
-def run_microcause(X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, user_lag: int, args: argparse.Namespace,) -> list[str]:
+def run_tsiscan(X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, user_lag: int, ) -> dict[str, Any]:
+    import iscan
+
+    X1, X2 = lagged(X1_ts, X2_ts, user_lag)
+    nodes = list(X1.columns)
+
+    pred_shifted, est_order, var_ratio_dict = iscan.est_node_shifts(
+        X1.to_numpy(dtype=float),
+        X2.to_numpy(dtype=float),
+        eta_G=0.05,
+        eta_H=0.05,
+        normalize_var=False,
+        shifted_node_thres=2.0,
+        elbow=True,
+        elbow_thres=30.0,
+        elbow_online=True,
+        use_both_rank=True,
+        verbose=False,
+    )
+
+    estimated_order = [nodes[int(i)] for i in est_order]
+    order_pos = {node: pos for pos, node in enumerate(estimated_order)}
+
+    shifted_nodes = [nodes[int(i)] for i in pred_shifted]
+    shifted_current_nodes = [node for node in shifted_nodes if int(node.time) == 0]
+
+    oriented_edges = {
+        (
+            (str(parent.name), int(parent.time)),
+            (str(target.name), int(target.time)),
+        )
+        for target in shifted_current_nodes
+        for parent in estimated_order[:order_pos[target]]
+        if parent != target and int(parent.time) <= int(target.time)
+    }
+
+    return {"oriented": oriented_edges, "undirected": set(), "nb_tests": 0, }
+
+
+def run_microcause(X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, user_lag: int, args: argparse.Namespace, ) -> list[str]:
     """
     :param X1_ts: time-series dataframe from the normal regime.
     :param X2_ts: time-series dataframe from the anomalous regime.
     :param user_lag: maximum temporal lag used by MicroCause.
     :param args: command-line arguments containing the MicroCause hyperparameters.
     :return: list of predicted root-cause nodes.
-     This function concatenates the normal and anomalous regimes into a single time series, sets the change point at the beginning of the anomalous regime, and runs the MicroCause root-cause analysis algorithm. 
+     This function concatenates the normal and anomalous regimes into a single time series, sets the change point at the beginning of the anomalous regime, and runs the MicroCause root-cause analysis algorithm.
      The returned list contains the predicted root-cause nodes.
     """
+    from baseline.microcause import micro_cause
+
     random.seed(args.seed)
     np.random.seed(args.seed)
 
     cols = list(X1_ts.columns)
-    data = pd.concat([X1_ts, X2_ts[cols]], ignore_index=True,)
+    data = pd.concat([X1_ts, X2_ts[cols]], ignore_index=True, )
     change_point = len(X1_ts)
 
     roots = micro_cause(
@@ -173,7 +224,7 @@ def run_microcause(X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, user_lag: int, args
     return list(dict.fromkeys(str(x) for x in (roots or [])))
 
 
-def run_rcd(X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, args: argparse.Namespace,) -> list[str]:
+def run_rcd(X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, args: argparse.Namespace, ) -> list[str]:
     """
     :param X1_ts: time-series dataframe from the normal regime.
     :param X2_ts: time-series dataframe from the anomalous regime.
@@ -181,6 +232,8 @@ def run_rcd(X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, args: argparse.Namespace,)
     :return: list of predicted root-cause nodes.
      This function runs the Root Cause Discovery (RCD) algorithm on the normal and anomalous regimes. The returned list contains the top-k predicted root-cause nodes.
     """
+    from baseline.rcd import top_k_rc, BINS
+
     np.random.seed(args.seed)
 
     normal_df = X1_ts.copy()
@@ -200,19 +253,18 @@ def run_rcd(X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, args: argparse.Namespace,)
 
 def args_parser() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Evaluate temporal difference-graph algorithms and local RBAL baselines.")
-    p.add_argument("--output-root", type=Path, default=RBAL_ROOT / "results")
-    p.add_argument("--settings", nargs="+", default=list(SETTINGS.keys()), choices=list(SETTINGS.keys()))
-    p.add_argument("--algos", nargs="+", default=GRAPH_ALGOS, choices=GRAPH_ALGOS)
-    p.add_argument("--p-list", nargs="+", type=int, default=[3, 5, 7, 9])
+    p.add_argument("--settings", nargs="+", default=["setting2_lag1"], choices=list(SETTINGS.keys()))
+    p.add_argument("--algos", nargs="+", default=GRAPH_ALGOS, choices=ALGOS)
+    p.add_argument("--p-list", nargs="+", type=int, default=[3])
     p.add_argument("--n-list", nargs="+", type=int, default=[1000])
     p.add_argument("--n-reps", type=int, default=10)
-    p.add_argument("--user-lags", nargs="+", type=int, default=None)
+    p.add_argument("--user-lags", nargs="+", type=int, default=[1])
 
     p.add_argument("--edge-prob", type=float, default=0.3)
     p.add_argument("--base-seed", type=int, default=12000)
     p.add_argument("--burn-in", type=int, default=200)
     p.add_argument("--min-abs-change", type=float, default=0.5)
-    p.add_argument("--change-model", choices=sorted(CHANGE_MODELS), default="single_edge")
+    p.add_argument("--change-model", choices=sorted(CHANGE_MODELS), default="all_parents_min2")
     p.add_argument("--min-incoming-parents", type=int, default=2)
 
     p.add_argument("--sparsity", type=float, default=0.05)
@@ -233,13 +285,12 @@ def args_parser() -> argparse.Namespace:
     return p.parse_args()
 
 
-def main() -> pd.DataFrame:
+def main() -> None:
     args = args_parser()
-    ensure(args.output_root / "tables")
-    ensure(args.output_root / "work")
-    (args.output_root / "eval_config.json").write_text(json.dumps({k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()}, indent=2))
 
-    rows, failures = [], []
+    rows = []
+    failures = []
+
     print("ROOT:", RBAL_ROOT)
     print("BASELINE_DIR:", BASELINE_DIR)
     print("Settings:", args.settings)
@@ -248,98 +299,167 @@ def main() -> pd.DataFrame:
 
     for setting in args.settings:
         lags = args.user_lags if args.user_lags is not None else DEFAULT_LAGS[setting]
+
         for p in args.p_list:
             for n in args.n_list:
                 for rep in range(1, args.n_reps + 1):
-                    rid = f"{setting}_p{p}_n{n}_rep{rep:03d}"
-                    print(f"\n=== Generating {rid} ===")
+                    run_id = f"{setting}_p{p}_n{n}_rep{rep:03d}"
+                    print(f"\n=== {run_id} ===")
+
                     try:
-                        s = seed_block(setting, p, n, rep, args.base_seed)
+                        seeds = seed_block(setting=setting, p=p, n=n, rep=rep, base_seed=args.base_seed, )
                         generated = generate_one_run(
                             setting_name=setting,
                             p=p,
                             n=n,
                             rep=rep,
                             edge_prob=args.edge_prob,
-                            structure_seed=s["structure_seed"],
-                            coef_seed=s["coef_seed"],
-                            dataset_seed=s["dataset_seed"],
-                            change_seed=s["change_seed"],
+                            structure_seed=seeds["structure_seed"],
+                            coef_seed=seeds["coef_seed"],
+                            dataset_seed=seeds["dataset_seed"],
+                            change_seed=seeds["change_seed"],
                             burn_in=args.burn_in,
                             min_abs_change=args.min_abs_change,
                             change_model=args.change_model,
                             min_incoming_parents=args.min_incoming_parents,
                         )
-                        X1_ts, X2_ts = generated["X1"], generated["X2"]
-                        truth, meta = generated["truth"], generated["metadata"]
-                        true_edges = {((str(u.name), int(u.time)), (str(v.name), int(v.time))) for u, v in truth["changed_edges_lagged"]}
+
+                        X1_ts = generated["X1"]
+                        X2_ts = generated["X2"]
+                        truth = generated["truth"]
+                        true_edges = {((str(source.name), int(source.time)), (str(target.name), int(target.time)),) for
+                                      source, target in truth["changed_edges_lagged"]}
                         shifted_nodes = set(map(str, truth["shifted_nodes"]))
-                        print("changed_edges:", meta.get("changed_edges_lagged"))
-                        print("shifted_nodes:", sorted(shifted_nodes))
+
                     except Exception as exc:
-                        failures.append({"setting": setting, "run_id": rid, "algo": "GENERATOR", "error_type": type(exc).__name__, "error_message": str(exc), "traceback": traceback.format_exc()})
+                        failures.append(
+                            {"run_id": run_id, "algo": "GENERATOR", "error": type(exc).__name__, "message": str(exc), })
                         print(f"[GENERATOR ERROR] {type(exc).__name__}: {exc}")
                         if not args.continue_on_error:
                             raise
                         continue
 
                     for algo in args.algos:
-                        for user_lag in ([-1] if algo == "rcd" else lags):
-                            print(f"\n--- Evaluating {algo} / {rid} / user_lag={user_lag} ---")
-                            base = {
-                                "setting": setting,
-                                "change_model": args.change_model,
-                                "run_id": rid,
-                                "algo": algo,
-                                "p": p,
-                                "n": n,
-                                "rep": rep,
-                                "truth_lag_max": int(meta.get("simulation_lag_max", SETTINGS[setting]["simulation_lag_max"])),
-                                "user_lag": int(user_lag),
-                                "iid": bool(meta.get("iid", SETTINGS[setting]["iid"])),
-                                "n_changed_edges": int(meta.get("n_changed_edges", len(true_edges))),
-                                "structure_seed_used": int(meta.get("structure_seed_used", s["structure_seed"])),
-                                "dataset_seed": int(meta.get("dataset_seed", s["dataset_seed"])),
-                            }
+                        algo_lags = [-1] if algo == "rcd" else lags
+
+                        for user_lag in algo_lags:
+                            print(f"\n--- {algo} / user_lag={user_lag} ---")
+
                             try:
                                 if algo in GRAPH_ALGOS:
-                                    pred = run_graph(algo, X1_ts, X2_ts, int(user_lag), args)
-                                    scores = evaluate_all_ts(true_edges, set(pred["oriented"]), set(pred["undirected"]), shifted_nodes)
-                                    for metric, vals in scores.items():
-                                        rows.append({**base, "metric": metric, "status": "ok", "nb_tests": pred.get("nb_tests", 0), "n_pred_oriented": len(pred["oriented"]), "n_pred_undirected": len(pred["undirected"]), **vals})
+                                    pred = run_graph(algo_name=algo, X1_ts=X1_ts, X2_ts=X2_ts, user_lag=int(user_lag),
+                                                     args=args, )
+                                    scores = evaluate_all_ts(true_edges=true_edges, pred_oriented=set(pred["oriented"]),
+                                                             pred_undirected=set(pred["undirected"]),
+                                                             shifted_nodes=shifted_nodes, )
+
+                                    for metric, values in scores.items():
+                                        row = {
+                                            "setting": setting,
+                                            "change_model": args.change_model,
+                                            "p": p,
+                                            "n": n,
+                                            "rep": rep,
+                                            "algo": algo,
+                                            "user_lag": int(user_lag),
+                                            "metric": metric,
+                                            "nb_tests": pred.get("nb_tests", 0),
+                                            "n_pred_oriented": len(pred["oriented"]),
+                                            "n_pred_undirected": len(pred["undirected"]),
+                                            **values,
+                                        }
+                                        rows.append(row)
+
+                                elif algo == "microcause":
+                                    pred_nodes = run_microcause(X1_ts=X1_ts, X2_ts=X2_ts, user_lag=int(user_lag),
+                                                                args=args, )
+                                    values = prf(set(pred_nodes), shifted_nodes)
+
+                                    row = {
+                                        "setting": setting,
+                                        "change_model": args.change_model,
+                                        "p": p,
+                                        "n": n,
+                                        "rep": rep,
+                                        "algo": algo,
+                                        "user_lag": int(user_lag),
+                                        "metric": "node_f1",
+                                        "pred_nodes": ";".join(pred_nodes),
+                                        "true_nodes": ";".join(sorted(shifted_nodes)),
+                                        **values,
+                                    }
+                                    rows.append(row)
+
+                                elif algo == "rcd":
+                                    pred_nodes = run_rcd(X1_ts=X1_ts, X2_ts=X2_ts, args=args, )
+                                    values = prf(set(pred_nodes), shifted_nodes)
+
+                                    row = {
+                                        "setting": setting,
+                                        "change_model": args.change_model,
+                                        "p": p,
+                                        "n": n,
+                                        "rep": rep,
+                                        "algo": algo,
+                                        "user_lag": int(user_lag),
+                                        "metric": f"node_top{args.rcd_k}",
+                                        "pred_nodes": ";".join(pred_nodes),
+                                        "true_nodes": ";".join(sorted(shifted_nodes)),
+                                        **values,
+                                    }
+                                    rows.append(row)
                                 else:
-                                    pred_nodes = run_microcause(X1_ts=X1_ts, X2_ts=X2_ts, user_lag=int(user_lag), args=args) if algo == "microcause" else run_rcd(X1_ts, X2_ts, args)
-                                    metric = "node_f1" if algo == "microcause" else f"node_top{args.rcd_k}"
-                                    rows.append({**base, "metric": metric, "status": "ok", "nb_tests": 0, "n_pred_oriented": 0, "n_pred_undirected": 0, "pred_nodes": ";".join(pred_nodes), "true_nodes": ";".join(sorted(shifted_nodes)), **prf(set(pred_nodes), shifted_nodes)})
+                                    raise ValueError(f"Unknown algorithm: {algo}")
+
                             except Exception as exc:
-                                failures.append({**base, "error_type": type(exc).__name__, "error_message": str(exc), "traceback": traceback.format_exc()})
-                                print(f"[ERROR] {type(exc).__name__}: {exc}")
+                                failures.append(
+                                    {"run_id": run_id, "algo": algo, "user_lag": user_lag, "error": type(exc).__name__,
+                                     "message": str(exc), })
+
+                                print(f"[ERROR] {algo}: {type(exc).__name__}: {exc}")
                                 if not args.continue_on_error:
                                     raise
 
-    final = pd.DataFrame(rows)
-    final.to_csv(args.output_root / "tables" / "all_results_long.csv", index=False)
-    pd.DataFrame(failures).to_csv(args.output_root / "tables" / "failures.csv", index=False)
+    if rows:
+        summary = (
+            pd.DataFrame(rows)
+            .groupby(
+                [
+                    "setting",
+                    "change_model",
+                    "p",
+                    "n",
+                    "user_lag",
+                    "algo",
+                    "metric",
+                ],
+                dropna=False,
+            )
+            .agg(
+                n_ok=("f1", "size"),
+                precision=("precision", "mean"),
+                recall=("recall", "mean"),
+                f1=("f1", "mean"),
+                f1_std=("f1", "std"),
+                f1_var=("f1", "var"),
+            )
+            .reset_index()
+            .sort_values(["setting", "p", "user_lag", "algo", "metric"])
+        )
 
-    if not final.empty:
-        summary = final[final["status"] == "ok"].groupby(["setting", "change_model", "p", "n", "user_lag", "algo", "metric"], dropna=False).agg(
-            n_ok=("f1", "size"),
-            precision_mean=("precision", "mean"),
-            recall_mean=("recall", "mean"),
-            f1_mean=("f1", "mean"),
-            f1_std=("f1", "std"),
-            f1_var=("f1", "var"),
-        ).reset_index()
-        summary.to_csv(args.output_root / "tables" / "summary_f1_by_setting_algo_metric.csv", index=False)
-        compact = summary[["setting", "change_model", "p", "n", "user_lag", "algo", "metric", "n_ok", "f1_mean", "f1_std", "f1_var"]].sort_values(["setting", "p", "user_lag", "algo", "metric"])
-        compact.to_csv(args.output_root / "tables" / "summary_f1_compact.csv", index=False)
-        print("\nFINAL SUMMARY: mean/std/var F1")
-        print(compact.to_string(index=False))
+        print("\nFINAL SUMMARY")
+        print(summary.to_string(index=False))
+    else:
+        print("\nNo successful result.")
 
-    print(f"\nSaved results to: {args.output_root / 'tables'}")
     if failures:
-        print(f"[WARN] {len(failures)} failures. Inspect failures.csv.")
-    return final
+        print(f"\n{len(failures)} failures:")
+        for failure in failures:
+            print(
+                f"- {failure.get('run_id')} | {failure.get('algo')} "
+                f"| lag={failure.get('user_lag', '-')}: "
+                f"{failure.get('error')}: {failure.get('message')}"
+            )
 
 
 if __name__ == "__main__":

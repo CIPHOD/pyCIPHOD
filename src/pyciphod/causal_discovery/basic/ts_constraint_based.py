@@ -189,4 +189,4 @@ class TsPC(TsConstraintBased):
         uc_rule(g=self.g_hat,sepset=self.sepset,)
         repeat = True
         while repeat:
-            repeat = apply_meek_rules(self.g_hat)
+            repeat = apply_ts_meek_rules(self.g_hat)

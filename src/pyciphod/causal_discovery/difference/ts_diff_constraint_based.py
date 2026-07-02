@@ -196,7 +196,7 @@ class TsLDiffPC(TsDifferenceConstraintBased):
 
         repeat = True
         while repeat:
-            repeat = apply_meek_rules(self.g_hat)
+            repeat = apply_ts_meek_rules(self.g_hat)
 
     def _has_directed_path(self, src, tgt):
         """Return True if there is a directed path src -> ... -> tgt."""
