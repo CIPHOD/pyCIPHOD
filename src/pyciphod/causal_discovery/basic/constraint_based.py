@@ -144,7 +144,7 @@ class PC(ConstraintBased):
                 self.g_hat.remove_undirected_edge(v, u)
                 self.g_hat.add_directed_edge(u, v)
 
-    def _uc_rule(self):
+    def _uc_rule(self, solve_conflict="bidirected"):
         """
         Apply the Unshielded Collider (UC) rule:
         For each unshielded triple x - y - z with x and z not adjacent, 
@@ -159,13 +159,19 @@ class PC(ConstraintBased):
                         continue
                     if (y not in self.sepset.get((x, z), [])):# and (y not in self.sepset.get((z, x), [])):
                         # TODO: add many ways to handle conflics
-                        if ((x, y) in self.g_hat.get_undirected_edges()) and ((z, y) in self.g_hat.get_undirected_edges()):
-                            # if ((x, y) not in self.g_hat.get_directed_edges()) and ((z, y) not in self.g_hat.get_directed_edges()):
-                            self.g_hat.remove_undirected_edge(x, y)
-                            self.g_hat.remove_undirected_edge(y, z)
-                            self.g_hat.remove_undirected_edge(y, x)
-                            self.g_hat.remove_undirected_edge(z, y)
-                            self.g_hat.add_directed_edges_from([(x, y), (z, y)])
+                        # Overwrite, Priority,
+                        if solve_conflict=="bidirected":
+                            test_conflict = True
+                        elif solve_conflict=="priority":
+                            test_conflict = ((x, y) in self.g_hat.get_undirected_edges()) and ((z, y) in self.g_hat.get_undirected_edges())
+                        # if ((x, y) in self.g_hat.get_undirected_edges()) and ((z, y) in self.g_hat.get_undirected_edges()):
+                        # if ((x, y) not in self.g_hat.get_directed_edges()) and ((z, y) not in self.g_hat.get_directed_edges())
+                        if test_conflict:
+                                self.g_hat.remove_undirected_edge(x, y)
+                                self.g_hat.remove_undirected_edge(y, z)
+                                self.g_hat.remove_undirected_edge(y, x)
+                                self.g_hat.remove_undirected_edge(z, y)
+                                self.g_hat.add_directed_edges_from([(x, y), (z, y)])
 
     def _apply_meek_rules(self):
         """

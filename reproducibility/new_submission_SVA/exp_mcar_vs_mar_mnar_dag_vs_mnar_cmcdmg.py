@@ -4,6 +4,10 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
+from sklearn.linear_model import BayesianRidge
+
 from pyciphod.causal_estimation.outcome_regression import GComputation
 
 
@@ -19,6 +23,7 @@ METHOD_LABELS = {
     "mar_ipw_recovery": "MAR recovery",
     "mnar_recovery_mp_dag": "MNAR-DAG recovery",
     "mnar_recovery_sva_cmcdmg": "MNAR-cm-C-DMG recovery",
+    "mice_imputation": "MICE imputation",
 }
 
 
@@ -651,6 +656,81 @@ def recover_joint_distribution_mar_ipw(data):
     return recovered
 
 
+def recover_joint_distribution_mice(
+    data,
+    n_imputations=10,
+    seed=123,
+):
+    """
+    MICE-like imputation baseline using sklearn IterativeImputer.
+
+    This estimates the joint distribution after multiple imputation.
+    It is not recoverability in the Mohan-Pearl sense.
+    """
+
+    imputation_data = data[
+        ["Z1", "Z2", "X1_star", "X2_star", "Y1_star"]
+    ].copy()
+
+    imputation_data = imputation_data.rename(
+        columns={
+            "X1_star": "X1",
+            "X2_star": "X2",
+            "Y1_star": "Y1",
+        }
+    )
+
+    joint_estimates = []
+
+    for m in range(n_imputations):
+        imputer = IterativeImputer(
+            estimator=BayesianRidge(),
+            max_iter=20,
+            sample_posterior=True,
+            random_state=seed + m,
+            initial_strategy="most_frequent",
+        )
+
+        imputed_array = imputer.fit_transform(imputation_data)
+
+        imputed = pd.DataFrame(
+            imputed_array,
+            columns=VARIABLES,
+            index=data.index,
+        )
+
+        # Z1 and Z2 are fully observed in your simulation, so keep them exact.
+        imputed["Z1"] = data["Z1"].astype(int)
+        imputed["Z2"] = data["Z2"].astype(int)
+
+        # The imputer returns continuous values.
+        # For binary variables, convert back to 0/1.
+        rng = np.random.default_rng(seed + 10_000 + m)
+
+        for variable in ["X1", "X2", "Y1"]:
+            probabilities = imputed[variable].clip(0.0, 1.0)
+            imputed[variable] = rng.binomial(1, probabilities)
+
+        imputed[VARIABLES] = imputed[VARIABLES].astype(int)
+
+        joint = (
+            imputed[VARIABLES]
+            .value_counts(sort=False)
+            .div(len(imputed))
+            .reindex(ALL_CELLS, fill_value=0.0)
+            .rename("mice_imputation")
+        )
+
+        joint_estimates.append(joint)
+
+    recovered = (
+        pd.concat(joint_estimates, axis=1)
+        .mean(axis=1)
+        .rename("mice_imputation")
+    )
+
+    return recovered
+
 def total_variation(p, q):
     return 0.5 * np.abs(p - q).sum()
 
@@ -700,6 +780,9 @@ def compare_recovery_methods(data, truth, setting=1):
     estimates = {
         "basic_mcar_recovery":
             recover_joint_distribution_mcar(data),
+
+    # "mice_imputation":
+    #     recover_joint_distribution_mice(data),
 
         "mar_ipw_recovery":
             recover_joint_distribution_mar_ipw(data),
@@ -771,6 +854,7 @@ def compare_recovery_methods(data, truth, setting=1):
 
 
 def convergence_experiment(setting=1, sample_sizes=(1000, 5000, 10000, 50000, 100000, 200000, 500000, 1000000),repetitions=30,):
+    # def convergence_experiment(setting=1, sample_sizes=(1000, 5000, 10000, 50000, 100000, 200000),repetitions=10, ):
     if setting == 1:
         population_truth = exact_full_data_distribution1()
     else:
@@ -784,10 +868,10 @@ def convergence_experiment(setting=1, sample_sizes=(1000, 5000, 10000, 50000, 10
             else:
                 data = simulate_binary_graph2(n=n, seed=100000 + 100 * repetition + n,)
 
-            r_vars = [ "RX1", "RX2", "RY1"]
-            print(data)
-            for r_var in r_vars:
-                print(f"Proportion of {r_var}=0: {1-data[r_var].mean():.4f}")
+            # r_vars = [ "RX1", "RX2", "RY1"]
+            # print(data)
+            # for r_var in r_vars:
+            #     print(f"Proportion of {r_var}=0: {1-data[r_var].mean():.4f}")
 
             method_results = compare_recovery_methods(
                 data,
@@ -996,7 +1080,7 @@ def plot_causal_effect_estimates(summary, setting_label=None):
 
 
 if __name__ == "__main__":
-    setting = 2  # 1 is a DAG with MCAR, MAR, and MNAR missingness; 2 is a DAG with MAR and MNAR missingness
+    setting = 1  # 1 is a DAG with MCAR, MAR, and MNAR missingness; 2 is a DAG with MAR and MNAR missingness
 
     if setting == 1:
         results, summary = convergence_experiment(setting=1)

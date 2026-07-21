@@ -256,9 +256,15 @@ def has_undirected_edge(u, v, g):
 
 if __name__ == '__main__':
     sig_level = 0.05
+    threshold_edge_count = 0.5
 
     ################ TPC 2PT ##########
-    tpc_res_matrix = pd.read_csv("./res_birds/tpc_2pt/consensus_adjacency_50_percent.csv", index_col=0)
+    if threshold_edge_count == 0.5:
+        tpc_res_matrix = pd.read_csv("./res_birds/tpc_2pt/consensus_adjacency_50_percent.csv", index_col=0)
+    elif threshold_edge_count == 0.6:
+        tpc_res_matrix = pd.read_csv("./res_birds/tpc_2pt/consensus_adjacency_60_percent.csv", index_col=0)
+    elif threshold_edge_count == 0.4:
+        tpc_res_matrix = pd.read_csv("./res_birds/tpc_2pt/consensus_adjacency_40_percent.csv", index_col=0)
 
     tpc_res_matrix.index = tpc_res_matrix.columns
     g_tpc = CompletedPartiallyDirectedAcyclicDifferenceGraph()
@@ -467,7 +473,7 @@ if __name__ == '__main__':
     g_pc_final.add_vertices(list(g_pc_list[0].get_vertices()))
 
     n_graphs = len(g_pc_list)
-    threshold = 0.5 * n_graphs
+    threshold = threshold_edge_count * n_graphs
 
     directed_counts = Counter()
     undirected_counts = Counter()

@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 import random
 
+import time
+
 from pyciphod.utils.scms.dynamic_scm import create_random_linear_dt_dynamic_scm, DtDynamicSCM, create_random_linear_dt_dynamic_scm_from_ftadmg
 from pyciphod.utils.time_series.data_format import DTimeVar
 from pyciphod.utils.graphs.partially_specified_graphs import CompletedPartiallyDirectedAcyclicDifferenceGraph
@@ -336,6 +338,10 @@ if __name__ == '__main__':
     list_restpc_f1_a_e = []
     list_restpc_f1_o_e = []
 
+    time_pc = []
+    time_fci = []
+    time_restpc = []
+
     for iter in range(1000):
         print("####### iter ", iter, " #######")
         if structure == "fork":
@@ -347,12 +353,24 @@ if __name__ == '__main__':
         elif structure == "chain_v":
             data, ge, gt = chain_v_structure(n_sample)
 
+        start_pc = time.time()
+        print("Running PC..")
         pc = PC(sparsity=0.05, ci_test=FisherZTest)
         pc.run(data)
+        end_pc = time.time()
+        time_pc.append(end_pc - start_pc)
+        start_fci = time.time()
+        print("Running FCI...")
         fci = FCI(sparsity=0.05, ci_test=FisherZTest)
         fci.run(data)
+        end_fci = time.time()
+        time_fci.append(end_fci - start_fci)
+        start_restpc = time.time()
+        print("Running RestPC...")
         restpc = RestPC(sparsity=0.05, ci_test=FisherZTest)
         restpc.run(data)
+        end_restpc = time.time()
+        time_restpc.append(end_restpc - start_restpc)
 
         ft_pc_a = f1_score_a(gt, pc.g_hat)
         list_pc_f1_a_t.append(ft_pc_a)
@@ -396,15 +414,18 @@ if __name__ == '__main__':
     print("F1-t-o", np.mean(list_pc_f1_o_t), np.var(list_pc_f1_o_t))
     print("F1-e-a", np.mean(list_pc_f1_a_e), np.var(list_pc_f1_a_e))
     print("F1-e-o", np.mean(list_pc_f1_o_e), np.var(list_pc_f1_o_e))
+    print("Time PC", np.mean(time_pc), np.var(time_pc))
 
     print("FCI")
     print("F1-t-a", np.mean(list_fci_f1_a_t), np.var(list_fci_f1_a_t))
     print("F1-t-o", np.mean(list_fci_f1_o_t), np.var(list_fci_f1_o_t))
     print("F1-e-a", np.mean(list_fci_f1_a_e), np.var(list_fci_f1_a_e))
     print("F1-e-o", np.mean(list_fci_f1_o_e), np.var(list_fci_f1_o_e))
+    print("Time FCI", np.mean(time_fci), np.var(time_fci))
 
     print("RestPC")
     print("F1-t-a", np.mean(list_restpc_f1_a_t), np.var(list_restpc_f1_a_t))
     print("F1-t-o", np.mean(list_restpc_f1_o_t), np.var(list_restpc_f1_o_t))
     print("F1-e-a", np.mean(list_restpc_f1_a_e), np.var(list_restpc_f1_a_e))
     print("F1-e-o", np.mean(list_restpc_f1_o_e), np.var(list_restpc_f1_o_e))
+    print("Time RestPC", np.mean(time_restpc), np.var(time_restpc))

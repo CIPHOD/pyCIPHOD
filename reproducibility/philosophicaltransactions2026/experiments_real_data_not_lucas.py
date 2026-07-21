@@ -148,6 +148,7 @@ def has_undirected_edge(u, v, g):
 
 if __name__ == '__main__':
     sig_level = 0.05
+    threshold_edge_count = 0.6
 
     ##############  PC 1PT ##########
     f1_a_pc_list = []
@@ -240,7 +241,7 @@ if __name__ == '__main__':
     g_pc_final.add_vertices(list(g_pc_list[0].get_vertices()))
 
     n_graphs = len(g_pc_list)
-    threshold = 0.5 * n_graphs
+    threshold = threshold_edge_count * n_graphs
 
     directed_counts = Counter()
     undirected_counts = Counter()

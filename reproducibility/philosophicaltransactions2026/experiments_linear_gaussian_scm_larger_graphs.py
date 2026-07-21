@@ -374,15 +374,15 @@ def chain_v_structure_10(n, name_prefix=""):
     ge.add_directed_edge(W5, D2)
     ge.add_directed_edge(X5, D2)
     ge.add_directed_edge(Y5, D2)
-    ge.add_directed_edge(V1, D1)
-    ge.add_directed_edge(V2, D1)
+    ge.add_directed_edge(V1, D2)
+    ge.add_directed_edge(V2, D2)
 
     ge.add_directed_edge(U5, D3)
     ge.add_directed_edge(W5, D3)
     ge.add_directed_edge(X5, D3)
     ge.add_directed_edge(Y5, D3)
-    ge.add_directed_edge(V1, D1)
-    ge.add_directed_edge(V2, D1)
+    ge.add_directed_edge(V1, D3)
+    ge.add_directed_edge(V2, D3)
 
     ge.add_undirected_edge(Z5, D1)
     ge.add_undirected_edge(Z5, D2)
@@ -391,14 +391,12 @@ def chain_v_structure_10(n, name_prefix=""):
     ge.add_undirected_edge(D1, D3)
     ge.add_undirected_edge(D2, D3)
 
-
     gt = CompletedPartiallyDirectedAcyclicDifferenceGraph()
     gt.add_vertices([X5, Y5, Z5, U5, W5, D1, D2, D3, V1, V2])
     gt.add_directed_edge(X5, Z5)
     gt.add_directed_edge(Y5, Z5)
     gt.add_directed_edge(U5, X5)
     gt.add_directed_edge(W5, Y5)
-
 
     gt.add_directed_edge(Z5, D1)
     gt.add_directed_edge(Z5, D2)
@@ -522,8 +520,6 @@ def chain_v_structure_20(n, name_prefix=""):
     d_3_4 = add3 * d_3_3 + azd3 * z3 + np.random.normal(size=n)
     d_3_5 = add3 * d_3_4 + azd3 * z4 + np.random.normal(size=n)
 
-
-
     d_4_0 = np.random.normal(size=n)
     d_4_1 = add * d_4_0 + azd * z0 + np.random.normal(size=n)
     d_4_2 = add * d_4_1 + azd * z1 + np.random.normal(size=n)
@@ -608,7 +604,6 @@ def chain_v_structure_20(n, name_prefix=""):
     v_6_4 = avv * v_6_3 + azv * y3 + np.random.normal(size=n)
     v_6_5 = avv * v_6_4 + azv * y4 + np.random.normal(size=n)
 
-
     df = pd.DataFrame(
         {X5: x5,
          Y5: y5,
@@ -649,115 +644,250 @@ def chain_v_structure_20(n, name_prefix=""):
     ge.add_undirected_edge(W5, V2)
     ge.add_undirected_edge(Y5, V2)
 
+    ge.add_undirected_edge(W5, V3)
+    ge.add_undirected_edge(Y5, V3)
+    ge.add_undirected_edge(W5, V4)
+    ge.add_undirected_edge(Y5, V4)
+    ge.add_undirected_edge(W5, V5)
+    ge.add_undirected_edge(Y5, V5)
+    ge.add_undirected_edge(W5, V6)
+    ge.add_undirected_edge(Y5, V6)
+
+
     ge.add_directed_edge(U5, D1)
     ge.add_directed_edge(W5, D1)
     ge.add_directed_edge(X5, D1)
     ge.add_directed_edge(Y5, D1)
     ge.add_directed_edge(V1, D1)
     ge.add_directed_edge(V2, D1)
+    ge.add_directed_edge(V3, D1)
+    ge.add_directed_edge(V4, D1)
+    ge.add_directed_edge(V5, D1)
+    ge.add_directed_edge(V6, D1)
 
     ge.add_directed_edge(U5, D2)
     ge.add_directed_edge(W5, D2)
     ge.add_directed_edge(X5, D2)
     ge.add_directed_edge(Y5, D2)
-    ge.add_directed_edge(V1, D1)
-    ge.add_directed_edge(V2, D1)
+    ge.add_directed_edge(V1, D2)
+    ge.add_directed_edge(V2, D2)
+    ge.add_directed_edge(V3, D2)
+    ge.add_directed_edge(V4, D2)
+    ge.add_directed_edge(V5, D2)
+    ge.add_directed_edge(V6, D2)
 
     ge.add_directed_edge(U5, D3)
     ge.add_directed_edge(W5, D3)
     ge.add_directed_edge(X5, D3)
     ge.add_directed_edge(Y5, D3)
-    ge.add_directed_edge(V1, D1)
-    ge.add_directed_edge(V2, D1)
+    ge.add_directed_edge(V1, D3)
+    ge.add_directed_edge(V2, D3)
+    ge.add_directed_edge(V3, D3)
+    ge.add_directed_edge(V4, D3)
+    ge.add_directed_edge(V5, D3)
+    ge.add_directed_edge(V6, D3)
+
+
+    ge.add_directed_edge(U5, D4)
+    ge.add_directed_edge(W5, D4)
+    ge.add_directed_edge(X5, D4)
+    ge.add_directed_edge(Y5, D4)
+    ge.add_directed_edge(V1, D4)
+    ge.add_directed_edge(V2, D4)
+    ge.add_directed_edge(V3, D4)
+    ge.add_directed_edge(V4, D4)
+    ge.add_directed_edge(V5, D4)
+    ge.add_directed_edge(V6, D4)
+
+
+    ge.add_directed_edge(U5, D5)
+    ge.add_directed_edge(W5, D5)
+    ge.add_directed_edge(X5, D5)
+    ge.add_directed_edge(Y5, D5)
+    ge.add_directed_edge(V1, D5)
+    ge.add_directed_edge(V2, D5)
+    ge.add_directed_edge(V3, D5)
+    ge.add_directed_edge(V4, D5)
+    ge.add_directed_edge(V5, D5)
+    ge.add_directed_edge(V6, D5)
+
+    ge.add_directed_edge(U5, D6)
+    ge.add_directed_edge(W5, D6)
+    ge.add_directed_edge(X5, D6)
+    ge.add_directed_edge(Y5, D6)
+    ge.add_directed_edge(V1, D6)
+    ge.add_directed_edge(V2, D6)
+    ge.add_directed_edge(V3, D6)
+    ge.add_directed_edge(V4, D6)
+    ge.add_directed_edge(V5, D6)
+    ge.add_directed_edge(V6, D6)
+
+    ge.add_directed_edge(U5, D7)
+    ge.add_directed_edge(W5, D7)
+    ge.add_directed_edge(X5, D7)
+    ge.add_directed_edge(Y5, D7)
+    ge.add_directed_edge(V1, D7)
+    ge.add_directed_edge(V2, D7)
+    ge.add_directed_edge(V3, D7)
+    ge.add_directed_edge(V4, D7)
+    ge.add_directed_edge(V5, D7)
+    ge.add_directed_edge(V6, D7)
+
+    ge.add_directed_edge(U5, D8)
+    ge.add_directed_edge(W5, D8)
+    ge.add_directed_edge(X5, D8)
+    ge.add_directed_edge(Y5, D8)
+    ge.add_directed_edge(V1, D8)
+    ge.add_directed_edge(V2, D8)
+    ge.add_directed_edge(V3, D8)
+    ge.add_directed_edge(V4, D8)
+    ge.add_directed_edge(V5, D8)
+    ge.add_directed_edge(V6, D8)
+
+    ge.add_directed_edge(U5, D9)
+    ge.add_directed_edge(W5, D9)
+    ge.add_directed_edge(X5, D9)
+    ge.add_directed_edge(Y5, D9)
+    ge.add_directed_edge(V1, D9)
+    ge.add_directed_edge(V2, D9)
+    ge.add_directed_edge(V3, D9)
+    ge.add_directed_edge(V4, D9)
+    ge.add_directed_edge(V5, D9)
+    ge.add_directed_edge(V6, D9)
 
     ge.add_undirected_edge(Z5, D1)
     ge.add_undirected_edge(Z5, D2)
     ge.add_undirected_edge(Z5, D3)
+    ge.add_undirected_edge(Z5, D4)
+    ge.add_undirected_edge(Z5, D5)
+    ge.add_undirected_edge(Z5, D6)
+    ge.add_undirected_edge(Z5, D7)
+    ge.add_undirected_edge(Z5, D8)
+    ge.add_undirected_edge(Z5, D9)
     ge.add_undirected_edge(D1, D2)
     ge.add_undirected_edge(D1, D3)
+    ge.add_undirected_edge(D1, D4)
+    ge.add_undirected_edge(D1, D5)
+    ge.add_undirected_edge(D1, D6)
+    ge.add_undirected_edge(D1, D7)
+    ge.add_undirected_edge(D1, D8)
+    ge.add_undirected_edge(D1, D9)
     ge.add_undirected_edge(D2, D3)
-
+    ge.add_undirected_edge(D2, D4)
+    ge.add_undirected_edge(D2, D5)
+    ge.add_undirected_edge(D2, D6)
+    ge.add_undirected_edge(D2, D7)
+    ge.add_undirected_edge(D2, D8)
+    ge.add_undirected_edge(D2, D9)
+    ge.add_undirected_edge(D3, D4)
+    ge.add_undirected_edge(D3, D5)
+    ge.add_undirected_edge(D3, D6)
+    ge.add_undirected_edge(D3, D7)
+    ge.add_undirected_edge(D3, D8)
+    ge.add_undirected_edge(D3, D9)
+    ge.add_undirected_edge(D4, D5)
+    ge.add_undirected_edge(D4, D6)
+    ge.add_undirected_edge(D4, D7)
+    ge.add_undirected_edge(D4, D8)
+    ge.add_undirected_edge(D4, D9)
+    ge.add_undirected_edge(D5, D6)
+    ge.add_undirected_edge(D5, D7)
+    ge.add_undirected_edge(D5, D8)
+    ge.add_undirected_edge(D5, D9)
+    ge.add_undirected_edge(D6, D7)
+    ge.add_undirected_edge(D6, D8)
+    ge.add_undirected_edge(D6, D9)
+    ge.add_undirected_edge(D7, D8)
+    ge.add_undirected_edge(D7, D9)
+    ge.add_undirected_edge(D8, D9)
 
     gt = CompletedPartiallyDirectedAcyclicDifferenceGraph()
-    gt.add_vertices([X5, Y5, Z5, U5, W5, D1, D2, D3, V1, V2])
+    gt.add_vertices([X5, Y5, Z5, U5, W5, D1, D2, D3, V1, V2, D4, D5, D6, D7, D8, D9, V3, V4, V5, V6])
     gt.add_directed_edge(X5, Z5)
     gt.add_directed_edge(Y5, Z5)
     gt.add_directed_edge(U5, X5)
     gt.add_directed_edge(W5, Y5)
 
-
     gt.add_directed_edge(Z5, D1)
     gt.add_directed_edge(Z5, D2)
     gt.add_directed_edge(Z5, D3)
+    gt.add_directed_edge(Z5, D4)
+    gt.add_directed_edge(Z5, D5)
+    gt.add_directed_edge(Z5, D6)
+    gt.add_directed_edge(Z5, D7)
+    gt.add_directed_edge(Z5, D8)
+    gt.add_directed_edge(Z5, D9)
     gt.add_directed_edge(X5, V1)
     gt.add_directed_edge(Y5, V2)
+    gt.add_directed_edge(Y5, V3)
+    gt.add_directed_edge(Y5, V4)
+    gt.add_directed_edge(Y5, V5)
+    gt.add_directed_edge(Y5, V6)
 
     return df, ge, gt
 
-
-
-def two_chain_v_structure(n):
-    df1, ge1, gt1 = chain_v_structure_10(n)
-    df2, ge2, gt2 = chain_v_structure_10(n, name_prefix="s_")
-
-    df = pd.concat([df1, df2], axis=1)
-    ge = CompletedPartiallyDirectedAcyclicDifferenceGraph()
-    ge.add_vertices(ge1.get_vertices())
-    ge.add_vertices(ge2.get_vertices())
-    for u, v in ge1.get_directed_edges():
-        ge.add_directed_edge(u, v)
-    for u, v in ge2.get_directed_edges():
-        ge.add_directed_edge(u, v)
-    for u, v in ge1.get_undirected_edges():
-        ge.add_undirected_edge(u, v)
-    for u, v in ge2.get_undirected_edges():
-        ge.add_undirected_edge(u, v)
-
-    gt = CompletedPartiallyDirectedAcyclicDifferenceGraph()
-    gt.add_vertices(gt1.get_vertices())
-    gt.add_vertices(gt2.get_vertices())
-    for u, v in gt1.get_directed_edges():
-        gt.add_directed_edge(u, v)
-    for u, v in gt2.get_directed_edges():
-        gt.add_directed_edge(u, v)
-
-    return df, ge, gt
-
-
-def three_chain_v_structure(n):
-    df1, ge1, gt1 = chain_v_structure_10(n)
-    df2, ge2, gt2 = chain_v_structure_10(n, name_prefix="s_")
-    df3, ge3, gt3 = chain_v_structure_10(n, name_prefix="t_")
-
-    df = pd.concat([df1, df2], axis=1)
-    ge = CompletedPartiallyDirectedAcyclicDifferenceGraph()
-    ge.add_vertices(ge1.get_vertices())
-    ge.add_vertices(ge2.get_vertices())
-    ge.add_vertices(ge3.get_vertices())
-    for u, v in ge1.get_directed_edges():
-        ge.add_directed_edge(u, v)
-    for u, v in ge2.get_directed_edges():
-        ge.add_directed_edge(u, v)
-    for u, v in ge3.get_directed_edges():
-        ge.add_directed_edge(u, v)
-    for u, v in ge1.get_undirected_edges():
-        ge.add_undirected_edge(u, v)
-    for u, v in ge2.get_undirected_edges():
-        ge.add_undirected_edge(u, v)
-    for u, v in ge3.get_undirected_edges():
-        ge.add_undirected_edge(u, v)
-
-    gt = CompletedPartiallyDirectedAcyclicDifferenceGraph()
-    gt.add_vertices(gt1.get_vertices())
-    gt.add_vertices(gt2.get_vertices())
-    gt.add_vertices(gt3.get_vertices())
-    for u, v in gt1.get_directed_edges():
-        gt.add_directed_edge(u, v)
-    for u, v in gt2.get_directed_edges():
-        gt.add_directed_edge(u, v)
-    for u, v in gt3.get_directed_edges():
-        gt.add_directed_edge(u, v)
-    return df, ge, gt
+# def two_chain_v_structure(n):
+#     df1, ge1, gt1 = chain_v_structure_10(n)
+#     df2, ge2, gt2 = chain_v_structure_10(n, name_prefix="s_")
+#
+#     df = pd.concat([df1, df2], axis=1)
+#     ge = CompletedPartiallyDirectedAcyclicDifferenceGraph()
+#     ge.add_vertices(ge1.get_vertices())
+#     ge.add_vertices(ge2.get_vertices())
+#     for u, v in ge1.get_directed_edges():
+#         ge.add_directed_edge(u, v)
+#     for u, v in ge2.get_directed_edges():
+#         ge.add_directed_edge(u, v)
+#     for u, v in ge1.get_undirected_edges():
+#         ge.add_undirected_edge(u, v)
+#     for u, v in ge2.get_undirected_edges():
+#         ge.add_undirected_edge(u, v)
+#
+#     gt = CompletedPartiallyDirectedAcyclicDifferenceGraph()
+#     gt.add_vertices(gt1.get_vertices())
+#     gt.add_vertices(gt2.get_vertices())
+#     for u, v in gt1.get_directed_edges():
+#         gt.add_directed_edge(u, v)
+#     for u, v in gt2.get_directed_edges():
+#         gt.add_directed_edge(u, v)
+#
+#     return df, ge, gt
+#
+#
+# def three_chain_v_structure(n):
+#     df1, ge1, gt1 = chain_v_structure_10(n)
+#     df2, ge2, gt2 = chain_v_structure_10(n, name_prefix="s_")
+#     df3, ge3, gt3 = chain_v_structure_10(n, name_prefix="t_")
+#
+#     df = pd.concat([df1, df2], axis=1)
+#     ge = CompletedPartiallyDirectedAcyclicDifferenceGraph()
+#     ge.add_vertices(ge1.get_vertices())
+#     ge.add_vertices(ge2.get_vertices())
+#     ge.add_vertices(ge3.get_vertices())
+#     for u, v in ge1.get_directed_edges():
+#         ge.add_directed_edge(u, v)
+#     for u, v in ge2.get_directed_edges():
+#         ge.add_directed_edge(u, v)
+#     for u, v in ge3.get_directed_edges():
+#         ge.add_directed_edge(u, v)
+#     for u, v in ge1.get_undirected_edges():
+#         ge.add_undirected_edge(u, v)
+#     for u, v in ge2.get_undirected_edges():
+#         ge.add_undirected_edge(u, v)
+#     for u, v in ge3.get_undirected_edges():
+#         ge.add_undirected_edge(u, v)
+#
+#     gt = CompletedPartiallyDirectedAcyclicDifferenceGraph()
+#     gt.add_vertices(gt1.get_vertices())
+#     gt.add_vertices(gt2.get_vertices())
+#     gt.add_vertices(gt3.get_vertices())
+#     for u, v in gt1.get_directed_edges():
+#         gt.add_directed_edge(u, v)
+#     for u, v in gt2.get_directed_edges():
+#         gt.add_directed_edge(u, v)
+#     for u, v in gt3.get_directed_edges():
+#         gt.add_directed_edge(u, v)
+#     return df, ge, gt
 
 
 if __name__ == '__main__':
@@ -787,21 +917,24 @@ if __name__ == '__main__':
         if nb_var == 10:
             data, ge, gt = chain_v_structure_10(n_sample)
         elif nb_var == 20:
-            data, ge, gt = two_chain_v_structure(n_sample)
-        elif nb_var == 30:
-            data, ge, gt = three_chain_v_structure(n_sample)
+            data, ge, gt = chain_v_structure_20(n_sample)
+        # elif nb_var == 30:
+        #     data, ge, gt = three_chain_v_structure(n_sample)
 
         start_pc = time.time()
+        print("Running PC..")
         pc = PC(sparsity=0.05, ci_test=FisherZTest)
         pc.run(data)
         end_pc = time.time()
         time_pc.append(end_pc - start_pc)
         start_fci = time.time()
+        print("Running FCI...")
         fci = FCI(sparsity=0.05, ci_test=FisherZTest)
         fci.run(data)
         end_fci = time.time()
         time_fci.append(end_fci - start_fci)
         start_restpc = time.time()
+        print("Running RestPC..")
         restpc = RestPC(sparsity=0.05, ci_test=FisherZTest)
         restpc.run(data)
         end_restpc = time.time()
@@ -816,7 +949,6 @@ if __name__ == '__main__':
         list_pc_f1_a_e.append(fe_pc_a)
         fe_pc_o = f1_score_o(ge, pc.g_hat)
         list_pc_f1_o_e.append(fe_pc_o)
-
 
         ft_fci_a = f1_score_a(gt, fci.g_hat)
         list_fci_f1_a_t.append(ft_fci_a)
