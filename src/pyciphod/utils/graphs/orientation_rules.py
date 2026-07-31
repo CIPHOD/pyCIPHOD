@@ -1,33 +1,7 @@
 from pyciphod.utils.time_series.data_format import DTimeVar
 
 
-def uc_rule(g, sepset):
-    """
-        Apply the Unshielded Collider (UC) rule:
-        For each unshielded triple x - y - z with x and z not adjacent,
-        orient x -> y <- z if y not in sepset(x, z).
-    """
-    nodes = g.get_vertices()
-    adj = {x: g.get_adjacencies(x) for x in nodes}
 
-    for x in nodes:
-        for y in sorted(adj[x]):
-            if y.time != 0:
-                continue
-
-            for z in sorted(adj[y]):
-                if z.time != 0:
-                    continue
-
-                if z == x or z in adj[x]:
-                    continue
-
-                if y not in sepset.get((x, z), []):
-                    g.remove_undirected_edge(x, y)
-                    g.add_directed_edge(x, y)
-
-                    g.remove_undirected_edge(z, y)
-                    g.add_directed_edge(z, y)
 
 def meek_rule_1(g, X, Y, Z):
     """
@@ -111,6 +85,35 @@ def time_orientation(g):
         elif y.time < x.time:
             g.remove_undirected_edge(x, y)
             g.add_directed_edge(y, x)
+
+def ts_uc_rule(g, sepset):
+    """
+        Apply the Unshielded Collider (UC) rule:
+        For each unshielded triple x - y - z with x and z not adjacent,
+        orient x -> y <- z if y not in sepset(x, z).
+    """
+    nodes = g.get_vertices()
+    adj = {x: g.get_adjacencies(x) for x in nodes}
+
+    for x in nodes:
+        for y in sorted(adj[x]):
+            if y.time != 0:
+                continue
+
+            for z in sorted(adj[y]):
+                if z.time != 0:
+                    continue
+
+                if z == x or z in adj[x]:
+                    continue
+
+                if y not in sepset.get((x, z), []):
+                    g.remove_undirected_edge(x, y)
+                    g.add_directed_edge(x, y)
+
+                    g.remove_undirected_edge(z, y)
+                    g.add_directed_edge(z, y)
+
 
 def ts_meek_rule_1(d, X, Y, Z):
     """

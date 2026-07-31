@@ -22,7 +22,8 @@ METHOD_LABELS = {
     "basic_mcar_recovery": "MCAR recovery",
     "mar_ipw_recovery": "MAR recovery",
     "mnar_recovery_mp_dag": "MNAR-DAG recovery",
-    "mnar_recovery_sva_cmcdmg": "MNAR-cm-C-DMG recovery",
+    "mnar_recovery_sva1_mcdmg": "MNAR-m-C-DMG recovery",
+    "mnar_recovery_sva2_cmcdmg": "MNAR-cm-C-DMG recovery",
     "mice_imputation": "MICE imputation",
 }
 
@@ -533,11 +534,135 @@ def recover_joint_distribution_cmcdmg(data):
         .sum()
         .div(len(data))
         .reindex(ALL_CELLS, fill_value=0.0)
-        .rename("cluster_recovery")
+        .rename("cmcdmg_recovery")
     )
 
     return recovered
 
+
+def recover_joint_distribution_mcdmg(data, setting=1):
+    observed_x = (
+        (data["RX1"] == 1)
+        & (data["RX2"] == 1)
+    )
+
+    complete = observed_x & (data["RY1"] == 1)
+
+    # P(RX1=1 | Z1,Z2)
+    p_rx1_given_z = (
+        data
+        .groupby(["Z1", "Z2"])["RX1"]
+        .mean()
+    )
+
+    #P(RX2=1 | MB(RX2))
+    if setting == 1:
+        # RX2 has an empty blanket
+        p_rx2 = data["RX2"].mean()
+    elif setting == 2:
+        # RX2 has blanket {Z1,Z2}
+        p_rx2_given_z = (
+            data
+            .groupby(["Z1", "Z2"])["RX2"]
+            .mean()
+        )
+
+    # P(RY1=1 | Z1,Z2,X1,X2,RX1=RX2=1)
+    y_observation_data = data.loc[
+        observed_x,
+        ["Z1", "Z2", "X1_star", "X2_star", "RY1"],
+    ].copy()
+
+    y_observation_data = y_observation_data.rename(
+        columns={
+            "X1_star": "X1",
+            "X2_star": "X2",
+        }
+    )
+
+    y_observation_data[
+        ["Z1", "Z2", "X1", "X2"]
+    ] = y_observation_data[
+        ["Z1", "Z2", "X1", "X2"]
+    ].astype(int)
+
+    p_y_observed_given_zx = (
+        y_observation_data
+        .groupby(["Z1", "Z2", "X1", "X2"])["RY1"]
+        .mean()
+    )
+
+    complete_data = data.loc[
+        complete,
+        ["Z1", "Z2", "X1_star", "X2_star", "Y1_star"],
+    ].copy()
+
+    complete_data = complete_data.rename(
+        columns={
+            "X1_star": "X1",
+            "X2_star": "X2",
+            "Y1_star": "Y1",
+        }
+    )
+
+    complete_data[VARIABLES] = (
+        complete_data[VARIABLES].astype(int)
+    )
+
+    z_index = pd.MultiIndex.from_frame(
+        complete_data[["Z1", "Z2"]]
+    )
+
+    zx_index = pd.MultiIndex.from_frame(
+        complete_data[["Z1", "Z2", "X1", "X2"]]
+    )
+
+    pi_x1 = (
+        p_rx1_given_z
+        .reindex(z_index)
+        .to_numpy()
+    )
+
+    if setting == 1:
+        pi_x2 = np.repeat(p_rx2, len(complete_data))
+    else:
+        pi_x2 = (
+            p_rx2_given_z
+            .reindex(z_index)
+            .to_numpy()
+        )
+
+    pi_y = (
+        p_y_observed_given_zx
+        .reindex(zx_index)
+        .to_numpy()
+    )
+
+    denominator = pi_x1 * pi_x2 * pi_y
+
+    if np.any(~np.isfinite(denominator)):
+        raise ValueError(
+            "A required cluster-level probability "
+            "could not be estimated."
+        )
+
+    if np.any(denominator <= 0):
+        raise ValueError(
+            "Cluster-level positivity failure."
+        )
+
+    complete_data["_weight"] = 1.0 / denominator
+
+    recovered = (
+        complete_data
+        .groupby(VARIABLES)["_weight"]
+        .sum()
+        .div(len(data))
+        .reindex(ALL_CELLS, fill_value=0.0)
+        .rename("mcdmg_recovery")
+    )
+
+    return recovered
 
 def recover_joint_distribution_mcar(data):
     complete_mask = (
@@ -775,6 +900,8 @@ def compare_recovery_methods(data, truth, setting=1):
     else:
         raise ValueError("setting must be 1 or 2")
 
+    recover_joint_distribution_mnar_mcdmg = recover_joint_distribution_mcdmg(data, setting=setting)
+
     recover_joint_distribution_mnar_cmcdmg = recover_joint_distribution_cmcdmg(data)
 
     estimates = {
@@ -790,7 +917,10 @@ def compare_recovery_methods(data, truth, setting=1):
         "mnar_recovery_mp_dag":
             recover_joint_distribution_mnar_dag,
 
-        "mnar_recovery_sva_cmcdmg":
+       "mnar_recovery_sva1_mcdmg":
+           recover_joint_distribution_mnar_mcdmg,
+
+        "mnar_recovery_sva2_cmcdmg":
             recover_joint_distribution_mnar_cmcdmg,
     }
 
@@ -1041,7 +1171,7 @@ def plot_causal_effect_error_convergence(summary, setting_label=None):
     plt.show()
 
 
-def plot_causal_effect_estimates(summary, setting_label=None):
+def plot_causal_effect_estimates(summary, setting, setting_label=None):
     fig, ax = plt.subplots(figsize=(8, 5))
 
     ground_truth_effect = compute_ground_truth(setting=setting)
@@ -1080,7 +1210,7 @@ def plot_causal_effect_estimates(summary, setting_label=None):
 
 
 if __name__ == "__main__":
-    setting = 1  # 1 is a DAG with MCAR, MAR, and MNAR missingness; 2 is a DAG with MAR and MNAR missingness
+    setting = 2  # 1 is a DAG with MCAR, MAR, and MNAR missingness; 2 is a DAG with MAR and MNAR missingness
 
     if setting == 1:
         results, summary = convergence_experiment(setting=1)
@@ -1088,6 +1218,14 @@ if __name__ == "__main__":
         results, summary = convergence_experiment(setting=2)
     print(summary)
 
+    columns = [
+        "n",
+        "method",
+        "mean_normalized_tv",
+        "sd_normalized_tv",
+    ]
+    print(summary[columns].to_string(index=False))
+
     plot_tv_convergence(summary, setting_label=f"Setting {setting}")
-    plot_causal_effect_estimates(summary, setting_label=f"Setting {setting}")
+    plot_causal_effect_estimates(summary, setting=setting, setting_label=f"Setting {setting}")
 

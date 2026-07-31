@@ -8,7 +8,6 @@ from pyciphod.causal_discovery.basic.constraint_based import PC, RestPC
 from pyciphod.utils.stat_tests.independence_tests import KernelPartialCorrelationTest, CopulaTest, CIMhTest
 
 
-
 def f1_score_o(g, g_hat):
     true_set = g.get_directed_edges()
     pred_set = g_hat.get_directed_edges()
