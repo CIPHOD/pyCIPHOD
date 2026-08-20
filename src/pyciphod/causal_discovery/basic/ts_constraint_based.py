@@ -6,7 +6,7 @@ import pandas as pd
 
 
 from pyciphod.utils.graphs.orientation_rules import (
-    time_orientation, uc_rule, apply_ts_meek_rules
+    time_orientation, ts_uc_rule, apply_ts_meek_rules
 )
 from pyciphod.utils.graphs.background_knowledge import BackgroundKnowledge
 from pyciphod.utils.graphs.partially_specified_graphs import PartiallyDirectedGraphs
@@ -186,7 +186,7 @@ class TsPC(TsConstraintBased):
     def _orientation(self):
         """Orient edges using temporal order, UC rule and Meek rules."""
         time_orientation(self.g_hat)
-        uc_rule(g=self.g_hat,sepset=self.sepset,)
+        ts_uc_rule(g=self.g_hat,sepset=self.sepset,)
         repeat = True
         while repeat:
             repeat = apply_ts_meek_rules(self.g_hat)
