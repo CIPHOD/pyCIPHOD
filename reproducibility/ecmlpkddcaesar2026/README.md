@@ -17,7 +17,7 @@ The script generates normal and anomalous regimes, runs the selected algorithms,
 Current development layout:
 
 ```text
-RBAL/
+./
 ├── generator.py
 │── experiments.py
 │── baseline/
@@ -56,6 +56,7 @@ tsdci_pc       tsDCI with additional tPC orientation
 tsMBGH         MBGH baseline
 microcause     MicroCause root-cause baseline
 rcd            RCD root-cause baseline
+tPCUnion            tPC in each regime and union of the two graphs
 ```
 
 `tsiSCAN` is intentionally disabled for now.
@@ -89,7 +90,7 @@ setting4_iid: [0, 1, 2]
 To reproduce the results of the paper run :
 
 ```bash
-python RBAL/experiments.py \
+python ./experiments.py \
   --settings setting2_lag1 \
   --p-list 3 \
   --n-list 1000 \
