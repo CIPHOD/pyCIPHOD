@@ -1,4 +1,4 @@
-# RBAL experiments
+# Root cause analysis via difference graph discovery - from linear time-series data - ECMLPKDD  Caesar
 
 This folder contains the evaluation script used to benchmark the temporal difference-graph algorithms and the baselines on synthetic time-series data generated.
 

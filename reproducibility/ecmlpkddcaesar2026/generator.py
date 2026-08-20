@@ -114,36 +114,19 @@ def generate_one_run(
         )
 
     setting = SETTINGS[setting_name]
-    run_id = f"{setting_name}_p{p}_n{n}_rep{rep:03d}"
 
-    ftdag, structure_seed_used = generate_valid_graph(
-        p=p,
-        edge_prob=edge_prob,
-        setting_name=setting_name,
-        structure_seed=structure_seed,
-        change_model=change_model,
-        min_incoming_parents=min_incoming_parents,
-    )
+    ftdag, structure_seed_used = generate_valid_graph(p=p, edge_prob=edge_prob, setting_name=setting_name, structure_seed=structure_seed, change_model=change_model, min_incoming_parents=min_incoming_parents,)
 
     coefs_before = sample_edge_coefficients(ftdag, seed=coef_seed)
     coefs_after = dict(coefs_before)
 
     rng_change = np.random.default_rng(change_seed)
-    changed_edges = choose_changed_edges(
-        ftdag=ftdag,
-        change_model=change_model,
-        seed=structure_seed_used + 999,
-        min_incoming_parents=min_incoming_parents,
-    )
+    changed_edges = choose_changed_edges(ftdag=ftdag, change_model=change_model, seed=structure_seed_used + 999, min_incoming_parents=min_incoming_parents,)
 
     coefficient_changes = []
     for changed_edge in changed_edges:
         old = float(coefs_before[changed_edge])
-        new = sample_changed_coefficient(
-            old=old,
-            rng=rng_change,
-            min_abs_change=min_abs_change,
-        )
+        new = sample_changed_coefficient(old=old, rng=rng_change, min_abs_change=min_abs_change,)
         coefs_after[changed_edge] = new
         coefficient_changes.append({
             **describe_edge(changed_edge),
@@ -152,18 +135,8 @@ def generate_one_run(
         })
 
     if setting["iid"]:
-        X1 = simulate_iid_contemporaneous_scm(
-            ftdag,
-            coefs_before,
-            n=n,
-            seed=dataset_seed,
-        )
-        X2 = simulate_iid_contemporaneous_scm(
-            ftdag,
-            coefs_after,
-            n=n,
-            seed=dataset_seed + 1,
-        )
+        X1 = simulate_iid_contemporaneous_scm(ftdag, coefs_before, n=n, seed=dataset_seed,)
+        X2 = simulate_iid_contemporaneous_scm(ftdag, coefs_after, n=n, seed=dataset_seed + 1,)
     else:
         X1 = simulate_linear_time_series_scm(
             ftdag=ftdag,
@@ -278,20 +251,10 @@ def generate_valid_graph(p,edge_prob,setting_name,structure_seed,change_model="s
 
     for attempt in range(max_graph_tries):
         candidate_seed = structure_seed + attempt
-        candidate = create_random_ft_dag(
-            num_ts=p,
-            p_edge=edge_prob,
-            causally_stationary=True,
-            max_delay=setting["max_delay_for_graph"],
-            seed=candidate_seed,
-        )
+        candidate = create_random_ft_dag(num_ts=p, p_edge=edge_prob, causally_stationary=True, max_delay=setting["max_delay_for_graph"], seed=candidate_seed,)
         candidate = prepare_graph_for_setting(candidate, setting_name)
 
-        if graph_is_valid_for_change_model(
-            candidate,
-            change_model=change_model,
-            min_incoming_parents=min_incoming_parents,
-        ):
+        if graph_is_valid_for_change_model(candidate, change_model=change_model, min_incoming_parents=min_incoming_parents,):
             return candidate, candidate_seed
 
     raise RuntimeError(
