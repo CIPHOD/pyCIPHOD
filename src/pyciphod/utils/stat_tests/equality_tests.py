@@ -340,6 +340,7 @@ class LinearRegressionCoefficientEqualityTest(CeTests, LinearRegressionCoefficie
         return LinearRegressionCoefficient.get_dependence(self, df)
 
     def get_pvalue(self, df1, df2):
+        # two-sample Wald test (z-test) for equality of two OLS regression coefficients.
         cond_list = [] if self.cond_list is None else list(self.cond_list)
         predictors = [self.x] + cond_list
         cols = [self.y] + predictors

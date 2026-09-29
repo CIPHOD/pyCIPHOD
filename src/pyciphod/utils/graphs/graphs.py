@@ -337,41 +337,70 @@ class Graph:
     #     return triples
 
 
-    def get_ancestors(self, vertex: Hashable) -> set:
-        """
-        sds
-        :param vertex:
-        :return:
-        """
-        def ancestor_recursive(vertex_i: Hashable, sublist: list):
-            sublist.append(vertex_i)
-            if self.get_parents(vertex_i):
-                for parent in self.get_parents(vertex_i):
-                    if parent not in sublist:
-                        return sublist + ancestor_recursive(parent, sublist)
-                    else:
-                        return sublist
-            else:
-                return sublist
-        return set(ancestor_recursive(vertex, []))
+    # def get_ancestors(self, vertex: Hashable) -> set:
+    #     """
+    #     sds
+    #     :param vertex:
+    #     :return:
+    #     """
+    #     def ancestor_recursive(vertex_i: Hashable, sublist: list):
+    #         sublist.append(vertex_i)
+    #         if self.get_parents(vertex_i):
+    #             for parent in self.get_parents(vertex_i):
+    #                 if parent not in sublist:
+    #                     return sublist + ancestor_recursive(parent, sublist)
+    #                 else:
+    #                     return sublist
+    #         else:
+    #             return sublist
+    #     return set(ancestor_recursive(vertex, []))
 
+    def get_ancestors(self, vertex: Hashable) -> set:
+        ancestors = {vertex}
+        stack = [vertex]
+
+        while stack:
+            current = stack.pop()
+
+            for parent in self.get_parents(current):
+                if parent not in ancestors:
+                    ancestors.add(parent)
+                    stack.append(parent)
+
+        return ancestors
+
+    # def get_descendants(self, vertex: Hashable) -> set:
+    #     """
+    #     sds
+    #     :param vertex:
+    #     :return:
+    #     """
+    #     def descendant_recursive(vertex_i: Hashable, sublist: list):
+    #         sublist.append(vertex_i)
+    #         if self.get_children(vertex_i):
+    #             for child in self.get_children(vertex_i):
+    #                 if child not in sublist:
+    #                     return sublist + descendant_recursive(child, sublist)
+    #                 else:
+    #                     return sublist
+    #         else:
+    #             return sublist
+    #     return set(descendant_recursive(vertex, []))
+
+    # This is a new verion, we should check if it affects Local Causal Discovery
     def get_descendants(self, vertex: Hashable) -> set:
-        """
-        sds
-        :param vertex:
-        :return:
-        """
-        def descendant_recursive(vertex_i: Hashable, sublist: list):
-            sublist.append(vertex_i)
-            if self.get_children(vertex_i):
-                for child in self.get_children(vertex_i):
-                    if child not in sublist:
-                        return sublist + descendant_recursive(child, sublist)
-                    else:
-                        return sublist
-            else:
-                return sublist
-        return set(descendant_recursive(vertex, []))
+        descendants = {vertex}
+        stack = [vertex]
+
+        while stack:
+            current = stack.pop()
+
+            for child in self.get_children(current):
+                if child not in descendants:
+                    descendants.add(child)
+                    stack.append(child)
+
+        return descendants
 
     def get_non_descendants(self, vertex: Hashable) -> set:
         return self.get_vertices().difference(self.get_descendants(vertex))

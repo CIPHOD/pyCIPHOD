@@ -270,7 +270,7 @@ def generate_graph_with_min_two_independent_parents(n):
 
 
 if __name__ == '__main__':
-    structure = "chain_v"
+    structure = "fork"
     n_sample = 1000
 
     list_pc_f1_a_t = []

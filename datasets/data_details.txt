@@ -7,3 +7,9 @@ monitoring_data:
 
 
 
+nephrology_data:
+    anomaly1_start = 44
+    anomaly2_start = 48
+    anomaly_end = 54
+
+

@@ -72,8 +72,6 @@ def wide_timevar_to_ts_df(df_wide: pd.DataFrame) -> pd.DataFrame:
         1  ...
         2  ...
     """
-    print(len(df_wide.columns))
-    print(len(df_wide))
     if len(df_wide) != 1:
         raise ValueError("Expected a one-row DataFrame representing one trajectory.")
 

@@ -219,7 +219,7 @@ def v_structure(n):
 
     z1 = np.random.normal(size=n)
     z2 = azz * z1 + axz * x1 + ayz * y1 + np.random.normal(size=n)
-    z3 = azz * z2 + axz * x1 + ayz * y1 + np.random.normal(size=n)
+    z3 = azz * z2 + axz * x2 + ayz * y2 + np.random.normal(size=n)
 
     df = pd.DataFrame(
         {X3: x3,
@@ -320,7 +320,7 @@ def chain_v_structure(n):
 
 
 if __name__ == '__main__':
-    structure = "chain_v"
+    structure = "v"
     n_sample = 5000
 
     list_pc_f1_a_t = []

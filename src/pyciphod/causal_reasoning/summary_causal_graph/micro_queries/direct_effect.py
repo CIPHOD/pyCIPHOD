@@ -2,6 +2,435 @@ from pyciphod.utils.graphs.partially_specified_graphs import SummaryCausalGraph
 from typing import Hashable
 from pyciphod.utils.time_series.data_format import DTimeVar
 
+
+def linear_direct_effect_is_identifiable(
+    g: SummaryCausalGraph,
+    x,
+    y,
+    gamma: int,
+    max_delay: int,
+):
+    """
+    Test graphical identifiability of the linear direct effect
+
+        alpha_{X_{t-gamma}, Y_t}
+
+    from a Summary Causal Graph according to Theorem 1 of
+    Ferreira and Assaad (AAAI 2024) and its extension in Assaad et al (2027)
+
+    If identifiable, also return valid finite adjustment sets:
+
+        - Ferreira & Assaad (2024), Definition 11
+        - Ferreira & Assaad (2024), Definition 12
+        - Assaad, Ez-Zejjari & Zan (2023), Definition 11,
+          when the SCG is acyclic except possibly for self-loops.
+
+    Parameters
+    ----------
+    g : SummaryCausalGraph
+        Summary causal graph.
+
+    x : Hashable
+        Exposure macro-variable X.
+
+    y : Hashable
+        Outcome macro-variable Y.
+
+    gamma : int
+        Lag of the micro direct effect:
+            X_{t-gamma} -> Y_t
+
+    max_delay : int
+        Maximum causal lag gamma_max.
+
+    Returns
+    -------
+    identifiable : bool
+        True if the direct effect is identifiable.
+
+    adjustment_sets : dict or None
+        None if the effect is non-identifiable.
+
+        Otherwise, a dictionary containing the available
+        finite adjustment sets.
+
+    Notes
+    -----
+    Ferreira and Assaad (2024), Theorem 1 assumes x != y.
+    """
+
+    # ---------------------------------------------------------
+    # Basic checks
+    # ---------------------------------------------------------
+
+    if gamma < 0:
+        raise ValueError("gamma must be non-negative.")
+
+    if max_delay < 0:
+        raise ValueError("max_delay must be non-negative.")
+
+    if gamma > max_delay:
+        raise ValueError(
+            "gamma cannot be greater than max_delay."
+        )
+
+    vertices = g.get_vertices()
+
+    if x not in vertices:
+        raise ValueError(f"{x!r} is not a vertex of the SCG.")
+
+    if y not in vertices:
+        raise ValueError(f"{y!r} is not a vertex of the SCG.")
+
+    directed_edges = g.get_directed_edges()
+
+    descendants_y = g.get_descendants(y)
+
+    # TODO This was not proven to be true in Ferreira and Assaad (2024), Theorem 1.
+    # ---------------------------------------------------------
+    # Lagged self-direct effect:
+    #
+    #     Y_{t-gamma} -> Y_t
+    #
+    # Ferreira and Assaad (2024), Theorem 1 assumes X != Y.
+    # The case X == Y is handled by
+    # Lemma~\ref{lemma:linear_self_direct_effect_identifiability}.
+    #
+    # For gamma > 0, the effect is non-identifiable iff
+    #   1. Y has a self-loop, and
+    #   2. SCC(Y) != {Y}.
+    #
+    # If Y has no self-loop, the effect is structurally zero.
+    # ---------------------------------------------------------
+
+    if x == y:
+        # For gamma = 0, exposure and outcome are the same
+        # micro variable, so this is not a direct-effect query.
+        if gamma == 0:
+            raise ValueError(
+                "When x == y, gamma must be strictly positive: "
+                "Y_t cannot be its own micro direct-effect exposure."
+            )
+
+        # Check that the macro variable exists before using
+        # graph operations below.
+        if y not in g.get_vertices():
+            raise ValueError(f"{y!r} is not a vertex of the SCG.")
+
+        # No self-loop means that no lagged micro edge
+        #
+        #     Y_{t-gamma} -> Y_t
+        #
+        # can occur in any compatible FT-DAG. Hence the
+        # corresponding coefficient is structurally zero.
+        if (y, y) not in directed_edges:
+            return True, {
+                "structural_zero": set()
+            }
+
+        # SCC(Y) != {Y} iff Y belongs to a directed cycle
+        # containing at least one other macro variable.
+        # y_in_nontrivial_scc = any(
+        #     y in set(cycle) and len(set(cycle)) > 1
+        #     for cycle in g.get_all_simple_cycles()
+        # )
+        #
+        # if y_in_nontrivial_scc:
+        #     return False, None
+        scc_y = g.get_strongly_connected_components(y)
+
+        if scc_y != {y}:
+            return False, None
+
+        # Otherwise:
+        #
+        #     SCC(Y) = {Y}
+        #
+        # and the lagged self-direct effect is identifiable.
+        # Continue below to construct the adjustment sets.
+
+    else:
+        # ---------------------------------------------------------
+        # If X -> Y is absent, the corresponding direct effect
+        # is structurally zero.
+        # ---------------------------------------------------------
+
+        if x not in g.get_parents(y):
+            return True, {
+                "structural_zero": set()
+            }
+
+
+        # =========================================================
+        # CONDITION 1
+        #
+        # X in Desc(Y)
+        # and there exists a cycle containing X but not Y.
+        # =========================================================
+
+        if x in descendants_y:
+
+            for cycle in g.get_all_simple_cycles():
+
+                cycle_vertices = set(cycle)
+
+                if (
+                    x in cycle_vertices
+                    and y not in cycle_vertices
+                ):
+                    return False, None
+
+        # =========================================================
+        # CONDITION 2
+        # =========================================================
+
+        # ---------------------------------------------------------
+        # Special two-node non-direct path:
+        #
+        #       X <-> Y
+        #
+        # represented in the SCG by X -> Y and Y -> X.
+        # For gamma = 0 this makes the effect non-identifiable.
+        # ---------------------------------------------------------
+
+        if gamma == 0 and (y, x) in directed_edges:
+            return False, None
+
+        # ---------------------------------------------------------
+        # Search active non-direct paths X ... Y
+        # ---------------------------------------------------------
+
+        active_paths = g.get_active_paths(
+            x,
+            y,
+            allowed_nodes=None,
+            max_path_length=len(vertices),
+        )
+
+        for path in active_paths:
+
+            # [X, Y] corresponds to the direct path.
+            # The reciprocal two-node case was handled above.
+            if len(path) < 3:
+                continue
+
+            internal_vertices = set(path[1:-1])
+
+            # Every internal node must be a descendant of Y.
+            if not internal_vertices.issubset(descendants_y):
+                continue
+
+            # -----------------------------------------------------
+            # Condition 2a: gamma = 0
+            # -----------------------------------------------------
+
+            if gamma == 0:
+                return False, None
+
+            # -----------------------------------------------------
+            # Condition 2b: gamma > 0
+            #
+            # No step of the path can be
+            #
+            #       Vi <- V{i+1}
+            #
+            # Equivalently each pair must contain the forward
+            # directed edge Vi -> V{i+1}.
+            #
+            # Reciprocal edges are therefore also accepted.
+            # -----------------------------------------------------
+
+            forward_path = True
+
+            for i in range(len(path) - 1):
+
+                vi = path[i]
+                vj = path[i + 1]
+
+                if (vi, vj) not in directed_edges:
+                    forward_path = False
+                    break
+
+            if forward_path:
+                return False, None
+
+    # =========================================================
+    # IDENTIFIABLE:
+    # construct the finite adjustment sets.
+    # =========================================================
+
+    adjustment_sets = {}
+
+    # In your lagged dataframe convention:
+    #
+    # DTimeVar(X, 0)  = X_t
+    # DTimeVar(X, -1) = X_{t-1}
+    # etc.
+    exposure = DTimeVar(x, -gamma)
+
+    # =========================================================
+    # Ferreira & Assaad 2024 - Definition 11
+    #
+    # Z = D_<t U A_<=t
+    #
+    # D_<t:
+    #   descendants of Y from t-max_delay to t-1
+    #
+    # A_<=t:
+    #   non-descendants of Y from t-max_delay to t
+    #
+    # excluding the exposure X_{t-gamma}.
+    # =========================================================
+
+    z_def11 = set()
+
+    # D_<t
+    for v in descendants_y:
+
+        for lag in range(1, max_delay + 1):
+            z_def11.add(
+                DTimeVar(v, -lag)
+            )
+
+    # A_<=t
+    non_descendants_y = g.get_non_descendants(y)
+
+    for v in non_descendants_y:
+
+        for lag in range(max_delay + 1):
+            z_def11.add(
+                DTimeVar(v, -lag)
+            )
+
+    z_def11.discard(exposure)
+
+    adjustment_sets[
+        "ferreira_assaad_2024_def11"
+    ] = z_def11
+
+    # =========================================================
+    # Ferreira & Assaad 2024 - Definition 12
+    #
+    # Z =
+    #   D_<t^{Anc(Y)}
+    #       U
+    #   A_<=t^{Anc(Y)}
+    #
+    # where
+    #
+    # D component:
+    #   Anc(Y) intersection Desc(Y), strictly before t
+    #
+    # A component:
+    #   Anc(Y) \ Desc(Y), up to and including t.
+    # =========================================================
+
+    ancestors_y = g.get_ancestors(y)
+
+    z_def12 = set()
+
+    ancestors_descendants_y = (
+        ancestors_y & descendants_y
+    )
+
+    ancestors_non_descendants_y = (
+        ancestors_y - descendants_y
+    )
+
+    # Anc(Y) intersection Desc(Y), strictly before t
+    for v in ancestors_descendants_y:
+
+        for lag in range(1, max_delay + 1):
+            z_def12.add(
+                DTimeVar(v, -lag)
+            )
+
+    # Anc(Y) \ Desc(Y), up to and including t
+    for v in ancestors_non_descendants_y:
+
+        for lag in range(max_delay + 1):
+            z_def12.add(
+                DTimeVar(v, -lag)
+            )
+
+    z_def12.discard(exposure)
+
+    adjustment_sets[
+        "ferreira_assaad_2024_def12"
+    ] = z_def12
+
+    # =========================================================
+    # Assaad, Ez-Zejjari & Zan 2023 - Definition 11
+    #
+    # This result applies to an acyclic summary causal graph
+    # with loops (ASCGL): after ignoring self-loops, there
+    # must be no directed macro cycle.
+    # =========================================================
+
+    cycles = g.get_all_simple_cycles()
+
+    acyclic_except_self_loops = all(
+        len(cycle) == 1
+        for cycle in cycles
+    )
+
+    if acyclic_except_self_loops:
+
+        z_assaad_2023 = set()
+
+        # -----------------------------------------------------
+        # B = Parents(Y) \ {X, Y}
+        #
+        # Add:
+        # B_t, ..., B_{t-max_delay}
+        # -----------------------------------------------------
+
+        B = g.get_parents(y) - {x, y}
+
+        for b in B:
+
+            for lag in range(max_delay + 1):
+                z_assaad_2023.add(
+                    DTimeVar(b, -lag)
+                )
+
+        # -----------------------------------------------------
+        # X =
+        #
+        # {X_t, ..., X_{t-max_delay}}
+        #       \ {X_{t-gamma}}
+        # -----------------------------------------------------
+
+        for lag in range(max_delay + 1):
+
+            z_assaad_2023.add(
+                DTimeVar(x, -lag)
+            )
+
+        # -----------------------------------------------------
+        # Y =
+        #
+        # {Y_{t-1}, ..., Y_{t-max_delay}}
+        #
+        # only if Y has a self-loop.
+        # -----------------------------------------------------
+
+        if (y, y) in directed_edges:
+            for lag in range(1, max_delay + 1):
+                z_assaad_2023.add(
+                    DTimeVar(y, -lag)
+                )
+
+        z_assaad_2023.discard(exposure)
+        z_assaad_2023.discard(DTimeVar(y, 0))
+
+        adjustment_sets[
+            "assaad_ezzejjari_zan_2023_def11"
+        ] = z_assaad_2023
+
+    return True, adjustment_sets
+
+
 def CDE_is_identifiable(Gs: SummaryCausalGraph, X : Hashable, Y : Hashable, gamma : int) -> bool:
     '''
     Implements Theorem 1 of "Average Controlled and Average Natural Micro Direct Effects in Summary
