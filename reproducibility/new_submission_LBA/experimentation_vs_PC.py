@@ -60,7 +60,7 @@ from pyciphod.utils.graphs.partially_specified_graphs import SummaryCausalGraph
 SAVE_OUTPUTS = True      # write CSVs to OUTPUT_DIR
 OUTPUT_DIR = "outputs"
 BURN_IN = 200
-ORACLE = False
+ORACLE = True
 N_JOBS = -1              # >1: evaluate edges in parallel (needs joblib); -1: all cores
 
 # seed=None -> not reproducible; seed=<int> -> fully reproducible
@@ -164,14 +164,14 @@ def _simulate(params, seed):
         intercept_low=0.0, intercept_high=0.0,
         u_dist=lambda: np.random.normal(0, 1), seed=seed,
     )
-    ft_dag = scm.induced_ft_dag()
+    ft_dag = scm[0].induced_ft_dag()
     return scm, ft_dag, ft_dag.get_summary_causal_graph()
 
 
 def _generate_data(scm, scg, params, seed):
     np.random.seed(seed)
     lag_max = scg.get_lag_max()
-    data = scm.generate_causally_stationary_time_series_from_latest_mechanisms(
+    data = scm[0].generate_causally_stationary_time_series_from_latest_mechanisms(
         n_timepoints=params["n_timepoints"], burn_in=BURN_IN, include_latent=False,
         time_series_format="ts_lagged", seed=seed,
     )
@@ -359,7 +359,7 @@ def summarize_sweep(df, param_name, base_params):
 # Main
 # ----------------------------------------------------------------------------
 
-def main_sweep(n_rep_per_case=100, use_tpc=True):
+def main_sweep(n_rep_per_case=3, use_tpc=True):
     base_params = dict(p=10, p_edge=0.4, gamma_max=2, alpha=0.05, n_timepoints=5000, seed=123)
     sweeps = {
         "p_edge": [0.2, 0.4, 0.6, 0.8],
