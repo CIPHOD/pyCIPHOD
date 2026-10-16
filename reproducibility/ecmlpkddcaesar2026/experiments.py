@@ -32,6 +32,7 @@ from pyciphod.causal_discovery.difference.ts_diff_constraint_based import TsLDif
 from metrics_ts import evaluate_all_ts
 
 from baseline.MBGH import learn_ddag
+from baseline.tspc_compare import TsPCCompare
 # from baseline.microcause import micro_cause
 # from baseline.rcd import top_k_rc, BINS
 
@@ -42,8 +43,8 @@ DEFAULT_LAGS = {
     "setting4_iid": [0, 1, 2],
 }
 
-ALGOS = ["tsldiffpc", "tsldiffpc_pc", "tsdci", "tsdci_pc", "tsMBGH", "microcause", "rcd", ]  # tsiscan
-GRAPH_ALGOS = {"tsldiffpc", "tsldiffpc_pc", "tsdci", "tsdci_pc", "tsMBGH", }  # "tsiscan"
+ALGOS = ["tsldiffpc", "tsldiffpc_pc", "tsdci", "tsdci_pc", "tsMBGH", "microcause", "rcd", "tspc_compare" ]  # tsiscan
+GRAPH_ALGOS = {"tsldiffpc", "tsldiffpc_pc", "tsdci", "tsdci_pc", "tsMBGH", "tspc_compare"}  # "tsiscan"
 
 
 ####
@@ -87,7 +88,7 @@ def lagged(X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, user_lag: int) -> tuple[pd.
 def run_graph(algo_name: str, X1_ts: pd.DataFrame, X2_ts: pd.DataFrame, user_lag: int, args: argparse.Namespace) -> \
 dict[str, Any]:
     """
-    :param algo_name: name of the temporal graph algorithm to run. Supported values are tsMBGH, tsldiffpc, tsldiffpc_pc, tsdci and tsdci_pc.
+    :param algo_name: name of the temporal graph algorithm to run. Supported values include tsMBGH, tspc_compare, tsldiffpc, tsldiffpc_pc, tsdci and tsdci_pc.
     :param X1_ts: time-series dataframe from the normal regime.
     :param X2_ts: time-series dataframe from the anomalous regime.
     :param user_lag: maximum lag used to construct the lagged temporal representation.
@@ -124,6 +125,26 @@ dict[str, Any]:
                     oriented.add(((str(parent.name), int(parent.time)), (str(child.name), int(child.time))))
         return {"oriented": oriented, "undirected": set(), "nb_tests": 0}
 
+    if algo_name == "tspc_compare":
+        if user_lag != 1:
+            raise ValueError("TsPCCompare currently supports only user_lag=1.")
+
+        algo = TsPCCompare(
+            alpha=args.sparsity,
+            pc_alpha=args.pc_sparsity if args.pc_sparsity is not None else args.sparsity,
+            max_sepset_size=args.max_sepset_size,
+        )
+        algo.run(X1, X2)
+
+        oriented = {((str(parent.name), int(parent.time)), (str(child.name), int(child.time)),) for parent, child in algo.changed_directed}
+        undirected = {((str(x.name), int(x.time)), (str(y.name), int(y.time)),) for x, y in algo.changed_undirected}
+
+        return {
+            "oriented": oriented,
+            "undirected": undirected,
+            "nb_tests": int(algo.nb_ci_tests or 0),
+        }
+
     if algo_name == "tsiscan":
         return run_tsiscan(X1_ts, X2_ts, user_lag=user_lag, )
 
@@ -145,10 +166,8 @@ dict[str, Any]:
         )
 
     pred = {
-        "oriented": {((str(u.name), int(u.time)), (str(v.name), int(v.time))) for u, v in
-                     algo.g_hat.get_directed_edges()},
-        "undirected": {((str(u.name), int(u.time)), (str(v.name), int(v.time))) for u, v in
-                       algo.g_hat.get_undirected_edges()},
+        "oriented": {((str(u.name), int(u.time)), (str(v.name), int(v.time))) for u, v in algo.g_hat.get_directed_edges()},
+        "undirected": {((str(u.name), int(u.time)), (str(v.name), int(v.time))) for u, v in algo.g_hat.get_undirected_edges()},
         "nb_tests": int(getattr(algo, "nb_ci_tests", getattr(algo, "nb_tests", 0)) or 0),
     }
     pred["nb_tests"] = max(pred["nb_tests"], base_tests)
@@ -347,11 +366,8 @@ def main() -> None:
 
                             try:
                                 if algo in GRAPH_ALGOS:
-                                    pred = run_graph(algo_name=algo, X1_ts=X1_ts, X2_ts=X2_ts, user_lag=int(user_lag),
-                                                     args=args, )
-                                    scores = evaluate_all_ts(true_edges=true_edges, pred_oriented=set(pred["oriented"]),
-                                                             pred_undirected=set(pred["undirected"]),
-                                                             shifted_nodes=shifted_nodes, )
+                                    pred = run_graph(algo_name=algo, X1_ts=X1_ts, X2_ts=X2_ts, user_lag=int(user_lag), args=args, )
+                                    scores = evaluate_all_ts(true_edges=true_edges, pred_oriented=set(pred["oriented"]), pred_undirected=set(pred["undirected"]), shifted_nodes=shifted_nodes, )
 
                                     for metric, values in scores.items():
                                         row = {
@@ -371,8 +387,7 @@ def main() -> None:
                                         rows.append(row)
 
                                 elif algo == "microcause":
-                                    pred_nodes = run_microcause(X1_ts=X1_ts, X2_ts=X2_ts, user_lag=int(user_lag),
-                                                                args=args, )
+                                    pred_nodes = run_microcause(X1_ts=X1_ts, X2_ts=X2_ts, user_lag=int(user_lag), args=args, )
                                     values = prf(set(pred_nodes), shifted_nodes)
 
                                     row = {
@@ -413,9 +428,7 @@ def main() -> None:
 
                             except Exception as exc:
                                 failures.append(
-                                    {"run_id": run_id, "algo": algo, "user_lag": user_lag, "error": type(exc).__name__,
-                                     "message": str(exc), })
-
+                                    {"run_id": run_id, "algo": algo, "user_lag": user_lag, "error": type(exc).__name__, "message": str(exc), })
                                 print(f"[ERROR] {algo}: {type(exc).__name__}: {exc}")
                                 if not args.continue_on_error:
                                     raise
@@ -436,12 +449,12 @@ def main() -> None:
                 dropna=False,
             )
             .agg(
-                n_ok=("f1", "size"),
+                #n_ok=("f1", "size"),
                 precision=("precision", "mean"),
                 recall=("recall", "mean"),
                 f1=("f1", "mean"),
                 f1_std=("f1", "std"),
-                f1_var=("f1", "var"),
+                #f1_var=("f1", "var"),
             )
             .reset_index()
             .sort_values(["setting", "p", "user_lag", "algo", "metric"])

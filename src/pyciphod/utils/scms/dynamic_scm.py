@@ -195,7 +195,7 @@ class DtDynamicSCM(DynamicSCM):
                 for parent_name, lag in latest_sig:
                     # Parent at time node.time - lag must exist at positive time
                     parent_time = node.time - lag
-                    if parent_time >= 1:
+                    if parent_time >= 0:
                         expected_sig.append((parent_name, lag))
                 expected_sig = tuple(sorted(expected_sig))
 
@@ -675,6 +675,150 @@ class DtDynamicSCM(DynamicSCM):
         return ts_observed
 
 
+class LinearDtDynamicSCM(DtDynamicSCM):
+    """
+    Linear discrete-time dynamic SCM specified through edge coefficients.
+
+    Parameters
+    ----------
+    v : Iterable[DTimeVar]
+        Observed time-indexed variables.
+
+    u : Iterable[DTimeVar]
+        Latent/exogenous time-indexed variables.
+
+    coefficients : Dict[Tuple[DTimeVar, DTimeVar], float]
+        Mapping (parent, child) -> linear coefficient.
+
+    intercepts : Optional[Dict[DTimeVar, float]]
+        Optional intercept for each observed variable.
+
+    u_dist : Optional[Any]
+        Distribution of the exogenous variables.
+    """
+
+    def __init__(
+        self,
+        v: Iterable[DTimeVar],
+        u: Iterable[DTimeVar],
+        coefficients: Dict[Tuple[DTimeVar, DTimeVar], float],
+        intercepts: Optional[Dict[DTimeVar, float]] = None,
+        u_dist: Optional[Any] = None,
+    ):
+
+        v = list(v)
+        u = list(u)
+
+        # --------------------------------------------------
+        # Validate variable types
+        # --------------------------------------------------
+        if not all(isinstance(node, DTimeVar) for node in v):
+            raise TypeError(
+                "All observed variables in LinearDtDynamicSCM "
+                "must be DTimeVar objects."
+            )
+
+        if not all(isinstance(node, DTimeVar) for node in u):
+            raise TypeError(
+                "All latent variables in LinearDtDynamicSCM "
+                "must be DTimeVar objects."
+            )
+
+        coefficients = coefficients or {}
+        intercepts = intercepts or {}
+
+        all_vars = list(u) + list(v)
+        all_vars_set = set(all_vars)
+
+        # --------------------------------------------------
+        # Collect parents
+        # --------------------------------------------------
+        parents_map: Dict[DTimeVar, List[DTimeVar]] = {
+            var: [] for var in all_vars
+        }
+
+        for (src, tgt), weight in coefficients.items():
+
+            if src not in all_vars_set:
+                raise ValueError(
+                    f"Unknown source variable {src!r} in coefficients."
+                )
+
+            if tgt not in all_vars_set:
+                raise ValueError(
+                    f"Unknown target variable {tgt!r} in coefficients."
+                )
+
+            # Observed -> latent edges are not allowed
+            if src in v and tgt in u:
+                raise ValueError(
+                    f"Invalid coefficient specification: observed variable "
+                    f"{src!r} cannot be a parent of latent variable {tgt!r}."
+                )
+
+            # No arrows from the future into the past
+            if src.time > tgt.time:
+                raise ValueError(
+                    f"Invalid temporal edge {src!r} -> {tgt!r}: "
+                    f"a parent cannot occur after its child."
+                )
+
+            parents_map[tgt].append(src)
+
+        # --------------------------------------------------
+        # Build structural functions
+        # --------------------------------------------------
+        f: Dict[DTimeVar, Dict[str, Any]] = {}
+
+        for var in all_vars:
+
+            parents = parents_map[var]
+            intercept = float(intercepts.get(var, 0.0))
+
+            # Exogenous variables are generated from u_dist
+            if var in u:
+                f[var] = {
+                    "parents": parents,
+                    "func": None,
+                }
+                continue
+
+            def make_linear_func(target, parent_list, b):
+
+                def func(par_vals, noise):
+                    value = b
+
+                    for parent in parent_list:
+                        value += (
+                            float(coefficients[(parent, target)])
+                            * float(par_vals.get(parent, 0.0))
+                        )
+
+                    value += noise
+                    return value
+
+                return func
+
+            f[var] = {
+                "parents": parents,
+                "func": make_linear_func(var, parents, intercept),
+            }
+
+        # --------------------------------------------------
+        # Initialize DtDynamicSCM
+        # --------------------------------------------------
+        super().__init__(
+            v=v,
+            u=u,
+            f=f,
+            u_dist=u_dist,
+        )
+
+        # Useful to expose them directly
+        self.coefficients = dict(coefficients)
+        self.intercepts = dict(intercepts)
+
+
 class CtDynamicSCM(DynamicSCM):
     def __init__(self, v: Iterable[CTimeVar], u: Iterable[CTimeVar], f: Dict[CTimeVar, Dict[str, Any]], u_dist: Optional[Any] = None):
         super().__init__(v, u, f, u_dist)
@@ -684,7 +828,269 @@ class CtDynamicSCM(DynamicSCM):
             raise TypeError("CtDynamicSCM requires CTimeVar latent variables.")
 
 
-def create_random_linear_dt_dynamic_scm_from_ftadmg(ftadmg: FtAcyclicDirectedMixedGraph,
+
+def create_random_linear_dt_dynamic_scm_from_ftadmg(
+    ftadmg: FtAcyclicDirectedMixedGraph,
+    weight_low: float = -1.0,
+    weight_high: float = 1.0,
+    intercept_low: float = 0.0,
+    intercept_high: float = 0.0,
+    u_dist: Optional[Any] = None,
+    causally_stationary: bool = True,
+    seed: Optional[int] = None,
+):
+    """
+    Build a LinearDtDynamicSCM from an existing full-time ADMG by
+    sampling random edge weights and intercepts.
+
+    Parameters
+    ----------
+    ftadmg : FtAcyclicDirectedMixedGraph
+        Full-time ADMG over DTimeVar variables.
+
+    weight_low, weight_high : float
+        Range from which directed causal coefficients are sampled.
+
+    intercept_low, intercept_high : float
+        Range from which intercepts are sampled.
+
+    u_dist : optional
+        Distribution used for exogenous variables.
+
+    causally_stationary : bool
+        If True, edges corresponding to the same
+        (source process, target process, lag) share the same coefficient
+        across time. Intercepts are also shared across time for each
+        process.
+
+    seed : int, optional
+        Random seed.
+
+    Returns
+    -------
+    scm : LinearDtDynamicSCM
+    coefficients : dict
+        Mapping (src, tgt) -> coefficient.
+    intercepts : dict
+        Mapping variable -> intercept.
+    """
+
+    rng = np.random.default_rng(seed)
+
+    # ---------------------------------------------------------
+    # Observed variables
+    # ---------------------------------------------------------
+    v = sorted(
+        ftadmg.get_vertices(),
+        key=lambda node: (node.name, node.time)
+    )
+
+    coefficients: Dict[
+        Tuple[DTimeVar, DTimeVar], float
+    ] = {}
+
+    u: List[DTimeVar] = []
+
+    # ---------------------------------------------------------
+    # Latent variables associated with confounded edges
+    # ---------------------------------------------------------
+    confounded_edges = sorted(
+        ftadmg.get_confounded_edges(),
+        key=lambda edge: (
+            edge[0].name,
+            edge[0].time,
+            edge[1].name,
+            edge[1].time,
+        )
+    )
+
+    for tgt_1, tgt_2 in confounded_edges:
+
+        # Normally both endpoints should correspond to the same time
+        latent = DTimeVar(
+            f"U_{tgt_1.name}_{tgt_2.name}",
+            tgt_1.time
+        )
+
+        # Avoid accidental duplication
+        suffix = 1
+        base_name = latent.name
+
+        while latent in u:
+            latent = DTimeVar(
+                f"{base_name}_{suffix}",
+                tgt_1.time
+            )
+            suffix += 1
+
+        u.append(latent)
+
+        coefficients[(latent, tgt_1)] = 1.0
+        coefficients[(latent, tgt_2)] = 1.0
+
+    # ---------------------------------------------------------
+    # Idiosyncratic noise variable for every observed variable
+    # ---------------------------------------------------------
+    for tgt in v:
+
+        latent = DTimeVar(
+            f"U_{tgt.name}",
+            tgt.time
+        )
+
+        suffix = 1
+        base_name = latent.name
+
+        while latent in u:
+            latent = DTimeVar(
+                f"{base_name}_{suffix}",
+                tgt.time
+            )
+            suffix += 1
+
+        u.append(latent)
+        coefficients[(latent, tgt)] = 1.0
+
+    # ---------------------------------------------------------
+    # Directed observed -> observed edges
+    # ---------------------------------------------------------
+    directed_edges = sorted(
+        ftadmg.get_directed_edges(),
+        key=lambda edge: (
+            edge[0].name,
+            edge[0].time,
+            edge[1].name,
+            edge[1].time,
+        )
+    )
+
+    if causally_stationary:
+
+        # Same coefficient for the same causal relation and lag
+        weight_template: Dict[Tuple[str, str, int], float] = {}
+
+        for src, tgt in directed_edges:
+
+            lag = tgt.time - src.time
+
+            key = (
+                src.name,
+                tgt.name,
+                lag,
+            )
+
+            if key not in weight_template:
+                weight_template[key] = float(
+                    rng.uniform(weight_low, weight_high)
+                )
+
+            coefficients[(src, tgt)] = weight_template[key]
+
+    else:
+
+        for src, tgt in directed_edges:
+            coefficients[(src, tgt)] = float(
+                rng.uniform(weight_low, weight_high)
+            )
+
+    # ---------------------------------------------------------
+    # Intercepts
+    # ---------------------------------------------------------
+    all_vars = list(u) + list(v)
+
+    intercepts: Dict[DTimeVar, float] = {}
+
+    if causally_stationary:
+
+        # One intercept per process, reused at every time point
+        intercept_template: Dict[str, float] = {}
+
+        for var in all_vars:
+
+            if var.name not in intercept_template:
+                intercept_template[var.name] = float(
+                    rng.uniform(
+                        intercept_low,
+                        intercept_high
+                    )
+                )
+
+            intercepts[var] = intercept_template[var.name]
+
+    else:
+
+        for var in all_vars:
+            intercepts[var] = float(
+                rng.uniform(
+                    intercept_low,
+                    intercept_high
+                )
+            )
+
+    # ---------------------------------------------------------
+    # Construct linear dynamic SCM
+    # ---------------------------------------------------------
+    scm = LinearDtDynamicSCM(
+        v=v,
+        u=u,
+        coefficients=coefficients,
+        intercepts=intercepts,
+        u_dist=u_dist,
+    )
+
+    return scm, coefficients, intercepts
+
+
+def create_random_linear_dt_dynamic_scm_from_ftdag(ftdag: FtDirectedAcyclicGraph,
+                                      weight_low: float = -1.0,
+                                      weight_high: float = 1.0,
+                                      intercept_low: float = 0.0,
+                                      intercept_high: float = 0.0,
+                                      u_dist: Optional[Any] = None,
+                                      seed: Optional[int] = None):
+    ftadmg = ftdag
+    return create_random_linear_dt_dynamic_scm_from_ftadmg(ftadmg, weight_low,
+                                             weight_high, intercept_low, intercept_high,
+                                             u_dist, seed)
+
+
+def create_random_linear_dt_dynamic_scm(
+    num_ts: int = 3,
+    p_edge: float = 0.3,
+    causally_stationary: bool = True,
+    max_delay: int = 2,
+    allow_instantaneous: bool = True,
+    allow_unmeasured_confounding: bool = True,
+    weight_low: float = -1.0,
+    weight_high: float = 1.0,
+    intercept_low: float = 0.0,
+    intercept_high: float = 0.0,
+    u_dist: Optional[Any] = None,
+    seed: Optional[int] = None,
+):
+
+    ftadmg = create_random_ft_admg(
+        num_ts=num_ts,
+        p_edge=p_edge,
+        causally_stationary=causally_stationary,
+        max_delay=max_delay,
+        allow_instantaneous=allow_instantaneous,
+        allow_unmeasured_confounding=allow_unmeasured_confounding,
+        seed=seed,
+    )
+
+    return create_random_linear_dt_dynamic_scm_from_ftadmg(
+        ftadmg=ftadmg,
+        weight_low=weight_low,
+        weight_high=weight_high,
+        intercept_low=intercept_low,
+        intercept_high=intercept_high,
+        u_dist=u_dist,
+        causally_stationary=causally_stationary,
+        seed=seed,
+    )
+
+def create_random_linear_dt_dynamic_scm_from_ftadmg_complex(ftadmg: FtAcyclicDirectedMixedGraph,
                                       weight_low: float = -1.0,
                                       weight_high: float = 1.0,
                                       intercept_low: float = 0.0,
@@ -824,7 +1230,7 @@ def create_random_linear_dt_dynamic_scm_from_ftadmg(ftadmg: FtAcyclicDirectedMix
     return scm
 
 
-def create_random_linear_dt_dynamic_scm(
+def create_random_linear_dt_dynamic_scm_complex(
     num_ts: int = 3,
     p_edge: float = 0.3,
     causally_stationary: bool = True,

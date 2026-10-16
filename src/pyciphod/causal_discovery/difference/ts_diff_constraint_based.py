@@ -13,14 +13,14 @@ from scipy import stats
 #     TsPC,
 # )
 # from pyciphod.causal_discovery.time_series.ts_constraint_orientation import (
-#     time_orientation, uc_rule, apply_meek_rules
+#     time_orientation, ts_uc_rule, apply_meek_rules
 # )
 
 from pyciphod.utils.graphs.partially_specified_graphs import FtCompletedPartiallyDirectedAcyclicGraph
 
 from pyciphod.causal_discovery.basic.ts_constraint_based import TsPC
 from pyciphod.utils.graphs.orientation_rules import (
-    time_orientation, uc_rule, apply_ts_meek_rules
+    time_orientation, ts_uc_rule, apply_ts_meek_rules
 )
 from pyciphod.utils.graphs.background_knowledge import BackgroundKnowledge
 from pyciphod.utils.stat_tests.equality_tests import (
@@ -192,7 +192,7 @@ class TsLDiffPC(TsDifferenceConstraintBased):
     def _orientation(self):
         """Orient edges using temporal order, UC rule and Meek rules."""
         time_orientation(self.g_hat)
-        uc_rule(g=self.g_hat, sepset=self.sepset)
+        ts_uc_rule(g=self.g_hat, sepset=self.sepset)
 
         repeat = True
         while repeat:

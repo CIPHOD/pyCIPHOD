@@ -8,7 +8,6 @@ from pyciphod.causal_discovery.basic.constraint_based import PC, RestPC
 from pyciphod.utils.stat_tests.independence_tests import KernelPartialCorrelationTest, CopulaTest, CIMhTest
 
 
-
 def f1_score_o(g, g_hat):
     true_set = g.get_directed_edges()
     pred_set = g_hat.get_directed_edges()
@@ -271,7 +270,7 @@ def generate_graph_with_min_two_independent_parents(n):
 
 
 if __name__ == '__main__':
-    structure = "chain_v"
+    structure = "fork"
     n_sample = 1000
 
     list_pc_f1_a_t = []
