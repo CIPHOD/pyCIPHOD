@@ -1,6 +1,49 @@
 from typing import Iterable, List, Set
 from pyciphod.utils.graphs.graphs import Graph
+from pyciphod.utils.time_series.data_format import DTimeVar
 
+# def d_separated(graph: Graph, X: Iterable[str], Y: Iterable[str], Z: Iterable[str] = None, max_path_length: int = 100) -> bool:
+#     """Return True if sets X and Y are d-separated given Z in `graph`.
+
+#     The function searches for any active path between any x in X and y in Y; if none exists, returns True.
+
+#     Parameters:
+#     - graph: Graph or subclass
+#     - X, Y: iterables of node labels
+#     - Z: iterable of conditioning node labels
+#     - max_path_length: cutoff for path search (avoids combinatorial explosion)
+#     """
+#     Xs = set(X)
+#     Ys = set(Y)
+#     Zs = set(Z or [])
+
+#     vertices = set(graph.get_vertices())
+#     # sanity: restrict to existing nodes
+#     Xs = Xs & vertices
+#     Ys = Ys & vertices
+#     Zs = Zs & vertices
+
+#     if not Xs or not Ys:
+#         # trivially separated if one is empty
+#         return True
+
+#     # For each pair, search for a simple path up to cutoff that is active
+#     for x in Xs:
+#         for y in Ys:
+#             if x == y:
+#                 # same node: not separated unless conditioning removes (we consider not separated)
+#                 return False
+#             try:
+#                 for path in graph.get_simple_paths(x, y, allowed_nodes=None, cutoff=max_path_length):
+#                     if graph.is_active_path(path, Zs):
+#                         #print(path)
+#                         # found an active path => not d-separated
+#                         return False
+#             except Exception:
+#                 # on errors conservatively assume not separated
+#                 return False
+#     # no active path found
+#     return True
 
 def d_separated(graph: Graph, X: Iterable[str], Y: Iterable[str], Z: Iterable[str] = None, max_path_length: int = 100) -> bool:
     """Return True if sets X and Y are d-separated given Z in `graph`.
@@ -18,33 +61,51 @@ def d_separated(graph: Graph, X: Iterable[str], Y: Iterable[str], Z: Iterable[st
     Zs = set(Z or [])
 
     vertices = set(graph.get_vertices())
+
+    # --- DEBUG: check for silent drops during intersection with vertices ---
+    #print(f"[d_separated] DEBUG Xs before filter: {Xs}")
+    #print(f"[d_separated] DEBUG Ys before filter: {Ys}")
+    #print(f"[d_separated] DEBUG Zs before filter: {Zs}")
+    #print(f"[d_separated] DEBUG vertices: {vertices}")
+
     # sanity: restrict to existing nodes
     Xs = Xs & vertices
     Ys = Ys & vertices
     Zs = Zs & vertices
 
+    #print(f"[d_separated] DEBUG Xs after filter:  {Xs}")
+    #print(f"[d_separated] DEBUG Ys after filter:  {Ys}")
+    #print(f"[d_separated] DEBUG Zs after filter:  {Zs}")
+    if Z and len(Zs) != len(set(Z) & set(Z)):
+        pass  # placeholder, real check below
+    dropped_z = set(Z or []) - Zs
+    # if dropped_z:
+    #     #print(f"[d_separated] WARNING: nodes dropped from Z (not found in vertices?): {dropped_z}")
+    # --- END DEBUG ---
+
     if not Xs or not Ys:
-        # trivially separated if one is empty
         return True
 
     # For each pair, search for a simple path up to cutoff that is active
     for x in Xs:
         for y in Ys:
             if x == y:
-                # same node: not separated unless conditioning removes (we consider not separated)
+                #print(f"[d_separated] DEBUG x == y ({x}), returning False")
                 return False
             try:
+                path_count = 0
                 for path in graph.get_simple_paths(x, y, allowed_nodes=None, cutoff=max_path_length):
-                    if graph.is_active_path(path, Zs):
-                        # print(path)
-                        # found an active path => not d-separated
+                    path_count += 1
+                    active = graph.is_active_path(path, Zs)
+                    #print(f"[d_separated] DEBUG path={path} active={active}")
+                    if active:
+                        #print(f"[d_separated] DEBUG => ACTIVE PATH FOUND between {x} and {y}: {path}")
                         return False
-            except Exception:
-                # on errors conservatively assume not separated
+                #print(f"[d_separated] DEBUG total paths checked between {x} and {y}: {path_count}")
+            except Exception as e:
+                #print(f"[d_separated] DEBUG EXCEPTION during path search {x}->{y}: {e!r}")
                 return False
-    # no active path found
     return True
-
 
 
 
@@ -113,3 +174,66 @@ def m_separated(graph: Graph, X: Iterable[str], Y: Iterable[str], Z: Iterable[st
     # We can use the same d_separated function but with a modified graph that treats all edges as undirected.
     latent_graph, _ = graph_to_latent_graph(graph)
     return d_separated(latent_graph, X, Y, Z, max_path_length)
+
+
+def ts_d_separated(
+    graph: Graph,
+    X: Iterable[DTimeVar],
+    Y: Iterable[DTimeVar],
+    Z: Iterable[DTimeVar] = None,
+    max_path_length: int = 100,
+) -> bool:
+    """Return True if sets X and Y are d-separated given Z in `graph`,
+    where X, Y, Z are iterables of DTimeVar (time-indexed variables).
+
+    The function converts each DTimeVar to its corresponding node label
+    in `graph` (via time_var_to_str) and then searches for any active
+    path between any x in X and y in Y; if none exists, returns True.
+
+    Parameters:
+    - graph: Graph or subclass, whose vertices are labeled using
+      time_var_to_str(DTimeVar(...)) strings
+    - X, Y: iterables of DTimeVar
+    - Z: iterable of DTimeVar (conditioning set)
+    - max_path_length: cutoff for path search (avoids combinatorial explosion)
+    """
+    def to_labels(time_vars: Iterable[DTimeVar]) -> set:
+        labels = set()
+        for tv in time_vars:
+            if not isinstance(tv, DTimeVar):
+                raise TypeError(f"Expected DTimeVar, got {type(tv).__name__}")
+            labels.add(time_var_to_str(tv))
+        return labels
+
+    Xs = to_labels(X)
+    Ys = to_labels(Y)
+    Zs = to_labels(Z or [])
+
+    vertices = set(graph.get_vertices())
+
+    # sanity: restrict to existing nodes
+    Xs = Xs & vertices
+    Ys = Ys & vertices
+    Zs = Zs & vertices
+
+    if not Xs or not Ys:
+        # trivially separated if one is empty
+        return True
+
+    # For each pair, search for a simple path up to cutoff that is active
+    for x in Xs:
+        for y in Ys:
+            if x == y:
+                # same node: not separated unless conditioning removes (we consider not separated)
+                return False
+            try:
+                for path in graph.get_simple_paths(x, y, allowed_nodes=None, cutoff=max_path_length):
+                    if graph.is_active_path(path, Zs):
+                        # found an active path => not d-separated
+                        return False
+            except Exception:
+                # on errors conservatively assume not separated
+                return False
+
+    # no active path found
+    return True

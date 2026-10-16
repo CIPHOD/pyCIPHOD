@@ -221,3 +221,32 @@ def apply_ts_meek_rules(g):
                         g.add_directed_edge(y, z)
 
     return changed
+
+
+def bk_orientation_rules(g, bk) -> None:
+    """Orient edges enforced by background knowledge (BK).
+
+    Two constraints from ``bk`` are applied to edges still undirected in ``g``:
+      - Mandatory orientations (u, v): oriented as u -> v.
+      - Forbidden orientations (u, v): u -> v is disallowed, so the edge is
+        oriented as v -> u instead, regardless of which tuple order the
+        underlying undirected edge happens to be stored under.
+
+    Only touches edges that are still undirected; already-oriented edges
+    (e.g. from time or UC-rule orientation) are left untouched.
+    """
+    undirected = g.get_undirected_edges()
+
+    # Mandatory orientations: u -> v
+    for u, v in bk.get_mandatory_orientations():
+        if (u, v) in undirected or (v, u) in undirected:
+            g.remove_undirected_edge(u, v)
+            g.remove_undirected_edge(v, u)
+            g.add_directed_edge(u, v)
+
+    # Forbidden orientations: u -> v is disallowed -> force v -> u
+    for u, v in bk.get_forbidden_orientations():
+        if (u, v) in undirected or (v, u) in undirected:
+            g.remove_undirected_edge(u, v)
+            g.remove_undirected_edge(v, u)
+            g.add_directed_edge(v, u)

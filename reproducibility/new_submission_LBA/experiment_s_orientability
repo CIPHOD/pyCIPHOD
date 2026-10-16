@@ -1,0 +1,376 @@
+# %%
+import itertools
+import numpy as np
+import matplotlib.pyplot as plt
+
+from pyciphod.utils.scms.dynamic_scm import create_random_linear_dt_dynamic_scm
+from pyciphod.utils.time_series.data_format import DTimeVar
+from pyciphod.causal_discovery.local.orientation_using_scg import sOrientability
+from pyciphod.utils.graphs.background_knowledge import BackgroundKnowledge
+from pyciphod.causal_discovery.basic.ts_constraint_based import TsPC
+from pyciphod.utils.stat_tests.independence_tests import FisherZTest
+from pyciphod.utils.graphs.partially_specified_graphs import SummaryCausalGraph
+
+# ==========================================================
+# Parameters
+# ==========================================================
+
+GAMMA_MAX = 1
+ORACLE = False
+
+# Monte Carlo experiment (direct random SCG sampling)
+MC_NODES = [2, 3, 4, 5, 6, 7, 8, 9, 10]
+MC_P_EDGE_SCG = [x * 0.1 for x in range(1, 11)]
+MC_TRIALS = 10000
+
+# TsPC experiment (used in part 2, still SCM-based)
+TPC_NODES = [3, 4, 5, 6, 7, 8, 9, 10]
+TPC_DENSITIES = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+TPC_TRIALS = 100
+
+# Output directory for figures
+FIGURE_DIR = "."
+
+
+# ==========================================================
+# Common utilities
+# ==========================================================
+
+def generate_scg(seed, n_nodes, p_edge):
+    """SCM-based SCG generation (used in experiment 2)."""
+    w = 1 / max(n_nodes * max(p_edge, 1e-3) * GAMMA_MAX, 1)
+
+    scm = create_random_linear_dt_dynamic_scm(
+        num_ts=n_nodes,
+        p_edge=p_edge,
+        causally_stationary=True,
+        max_delay=GAMMA_MAX,
+        allow_instantaneous=True,
+        allow_unmeasured_confounding=False,
+        weight_low=-w,
+        weight_high=w,
+        intercept_low=0.0,
+        intercept_high=0.0,
+        u_dist=lambda: np.random.normal(),
+        seed=seed,
+    )
+
+    ft_dag = scm.induced_ft_dag()
+    scg = ft_dag.get_summary_causal_graph()
+
+    return scm, ft_dag, scg
+
+
+def generate_random_scg(seed, n_nodes, p_edge_scg):
+    """
+    Directly samples a random SCG (summary causal graph), without going
+    through an SCM / FT-DAG simulation.
+
+    The SCG is a directed graph over `n_nodes` vertices where, for every
+    ordered pair (i, j) -- including i == j (self-loops) and both (i, j)
+    and (j, i) independently (allowing 2-cycles A -> B and B -> A) -- a
+    directed edge is added independently with probability `p_edge_scg`.
+    """
+    rng = np.random.default_rng(seed)
+
+    scg = SummaryCausalGraph()
+    scg.add_lag_max(GAMMA_MAX)
+
+    nodes = [f"X{i}" for i in range(n_nodes)]
+    for v in nodes:
+        scg.add_vertex(v)
+
+    for a in nodes:
+        for b in nodes:
+            if rng.random() < p_edge_scg:
+                scg.add_directed_edge(a, b)
+
+    return scg
+
+
+def plot_heatmap(values, xs, ys, title, cbar="Proportion", filename=None):
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    im = ax.imshow(
+        values,
+        origin="lower",
+        aspect="auto",
+        cmap="viridis",
+        vmin=0,
+        vmax=1,
+    )
+
+    ax.set_xticks(range(len(xs)))
+    ax.set_xticklabels(xs)
+
+    ax.set_yticks(range(len(ys)))
+    ax.set_yticklabels(ys)
+
+    ax.set_xlabel("Edge probability")
+    ax.set_ylabel("Number of nodes")
+    ax.set_title(title)
+
+    plt.colorbar(im, ax=ax, label=cbar)
+    plt.tight_layout()
+
+    if filename is not None:
+        fig.savefig(filename, dpi=150, bbox_inches="tight")
+
+    plt.show()
+
+#%%
+# ==========================================================
+# Experiment 1
+# Monte Carlo on SCGs (direct random SCG sampling)
+# ==========================================================
+
+def fully_s_orientable(scg):
+    for a, b, _ in scg.get_edges():
+
+        if a == b:
+            continue
+
+        if not sOrientability(
+            scg,
+            DTimeVar(a, 0),
+            DTimeVar(b, 0),
+        ).is_s_orientable():
+            return False
+
+    return True
+
+
+def mc_rate(n_nodes, p_edge_scg, n_trials):
+    fully = 0
+
+    for _ in range(n_trials):
+        scg = generate_random_scg(
+            np.random.randint(10_000_000),
+            n_nodes,
+            p_edge_scg,
+        )
+
+        fully += fully_s_orientable(scg)
+
+    fully /= n_trials
+    return fully, 1 - fully
+
+
+heatmap_full = np.zeros((len(MC_NODES), len(MC_P_EDGE_SCG)))
+heatmap_non = np.zeros_like(heatmap_full)
+
+for i, p in enumerate(MC_NODES):
+    for j, d in enumerate(MC_P_EDGE_SCG):
+
+        heatmap_full[i, j], heatmap_non[i, j] = mc_rate(
+            p,
+            d,
+            MC_TRIALS,
+        )
+
+        print(
+            f"MC | p={p}, p_edge_scg={d:.1f} "
+            f"| full={heatmap_full[i,j]:.3f}"
+        )
+
+
+plot_heatmap(
+    heatmap_full,
+    MC_P_EDGE_SCG,
+    MC_NODES,
+    "Fully s-orientable SCGs",
+    filename=f"{FIGURE_DIR}/mc_fully_s_orientable_scgs.png",
+)
+
+
+#%%
+# ==========================================================
+# Background knowledge
+# ==========================================================
+
+def bk_from_scg(scg: SummaryCausalGraph, gamma_max: int):
+    bk = BackgroundKnowledge()
+
+    V = list(scg.get_vertices())
+    adj = {x: set(scg.get_adjacencies(x)) for x in V}
+    pa = {x: set(scg.get_parents(x)) for x in V}
+    ch = {x: set(scg.get_children(x)) for x in V}
+
+    for x, y in itertools.combinations(V, 2):
+
+        if y not in adj[x]:
+            for k, l in itertools.product(
+                range(gamma_max + 1),
+                repeat=2,
+            ):
+                bk.add_forbidden_edge(DTimeVar(x, -k), DTimeVar(y, -l))
+                bk.add_forbidden_edge(DTimeVar(y, -k), DTimeVar(x, -l))
+
+        else:
+            if x in pa[y] and x not in ch[y]:
+                bk.add_mandatory_orientation(
+                    DTimeVar(x, 0),
+                    DTimeVar(y, 0),
+                )
+
+            if y in pa[x] and y not in ch[x]:
+                bk.add_mandatory_orientation(
+                    DTimeVar(y, 0),
+                    DTimeVar(x, 0),
+                )
+
+    return bk
+
+
+# ==========================================================
+# Data generation
+# ==========================================================
+
+def generate_instance(seed, n_nodes, density):
+
+    scm, ft_dag, scg = generate_scg(
+        seed,
+        n_nodes,
+        density,
+    )
+
+    data = scm.generate_causally_stationary_time_series_from_latest_mechanisms(
+        n_timepoints=10000,
+        burn_in=200,
+        include_latent=False,
+        time_series_format="ts_lagged",
+        seed=seed,
+    )
+
+    data = data[
+        [c for c in data.columns if 0 <= -c.time <= GAMMA_MAX]
+    ].copy()
+
+    return scg, ft_dag, data
+
+
+# ==========================================================
+# TsPC evaluation
+# ==========================================================
+
+def edge_oriented(scg, ft_dag, data, edge):
+
+    tpc = TsPC(
+        sparsity=0.05,
+        ci_test=FisherZTest,
+        background_knowledge=bk_from_scg(scg, GAMMA_MAX),
+        oracle=ORACLE,
+        true_ftdag=ft_dag,
+    )
+
+    tpc.run(data)
+
+    return edge not in tpc.g_hat.get_undirected_edges()
+
+
+# ==========================================================
+# Experiment 2
+# Orientation rate
+# ==========================================================
+
+def orientation_rate(n_nodes, density, target_s, n_trials):
+
+    oriented = []
+
+    while len(oriented) < n_trials:
+
+        seed = np.random.randint(10_000_000)
+
+        scg, ft_dag, data = generate_instance(
+            seed,
+            n_nodes,
+            density,
+        )
+
+        for a, b, _ in scg.get_edges():
+
+            if a == b:
+                continue
+
+            edge = (
+                DTimeVar(a, 0),
+                DTimeVar(b, 0),
+            )
+
+            if (
+                sOrientability(
+                    scg,
+                    edge[0],
+                    edge[1],
+                ).is_s_orientable()
+                != target_s
+            ):
+                continue
+
+            oriented.append(
+                edge_oriented(
+                    scg,
+                    ft_dag,
+                    data,
+                    edge,
+                )
+            )
+
+            print(
+                f"TsPC | p={n_nodes}, density={density:.1f}, "
+                f"{'s' if target_s else 'non-s'} "
+                f"{len(oriented)}/{n_trials}"
+            )
+
+            break
+
+    return np.mean(oriented)
+
+
+# ==========================================================
+# Sweep
+# ==========================================================
+
+heatmap_s = np.zeros((len(TPC_NODES), len(TPC_DENSITIES)))
+heatmap_non = np.zeros_like(heatmap_s)
+
+for i, p in enumerate(TPC_NODES):
+    for j, d in enumerate(TPC_DENSITIES):
+
+        heatmap_s[i, j] = orientation_rate(
+            p,
+            d,
+            True,
+            TPC_TRIALS,
+        )
+
+        heatmap_non[i, j] = orientation_rate(
+            p,
+            d,
+            False,
+            TPC_TRIALS,
+        )
+
+
+# ==========================================================
+# Plots
+# ==========================================================
+
+plot_heatmap(
+    heatmap_s,
+    TPC_DENSITIES,
+    TPC_NODES,
+    "Orientation rate for s-orientable edges",
+    "Orientation rate",
+    filename=f"{FIGURE_DIR}/tspc_orientation_rate_s.png",
+)
+
+plot_heatmap(
+    heatmap_non,
+    TPC_DENSITIES,
+    TPC_NODES,
+    "Orientation rate for non-s-orientable edges",
+    "Orientation rate",
+    filename=f"{FIGURE_DIR}/tspc_orientation_rate_non_s.png",
+)
+# %%

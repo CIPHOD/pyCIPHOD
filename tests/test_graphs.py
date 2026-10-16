@@ -230,21 +230,29 @@ def test_construct_from_dag_preserves_vertices():
 
 
 def test_chain_and_collider():
-    # Chain: A -> B -> C, A and C are d-separated given B
+    # Chain: A -> B -> C, A and C are d-separated given B.
+    # Also verify symmetry of d-separation.
     g = Graph()
     g.add_directed_edge('A', 'B')
     g.add_directed_edge('B', 'C')
 
-    assert not d_separated(g, ['A'], ['C'])  # without conditioning path active
-    assert d_separated(g, ['A'], ['C'], ['B'])  # conditioning on B blocks the chain
+    assert not d_separated(g, ['A'], ['C'])          # without conditioning, path is active
+    assert not d_separated(g, ['C'], ['A'])          # symmetry
 
-    # Collider: A -> B <- C, A and C are d-separated unless B (or its descendant) is conditioned
+    assert d_separated(g, ['A'], ['C'], ['B'])       # conditioning on B blocks the chain
+    assert d_separated(g, ['C'], ['A'], ['B'])       # symmetry
+
+    # Collider: A -> B <- C, A and C are d-separated unless B (or its descendant) is conditioned.
+    # Also verify symmetry of d-separation.
     g2 = Graph()
     g2.add_directed_edge('A', 'B')
     g2.add_directed_edge('C', 'B')
 
     assert d_separated(g2, ['A'], ['C'])
+    assert d_separated(g2, ['C'], ['A'])             # symmetry
+
     assert not d_separated(g2, ['A'], ['C'], ['B'])
+    assert not d_separated(g2, ['C'], ['A'], ['B'])  # symmetry
 
 
 def test_fork_structure_blocks_when_conditioned():

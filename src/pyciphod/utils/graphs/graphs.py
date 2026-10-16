@@ -191,10 +191,57 @@ class Graph:
         """True if there is any adjacency between u and v (directed, confounded, undirected, uncertain)."""
         return vertex_i in self.get_adjacencies(vertex_j)
 
-    def is_active_path(self,path: list, adjustment_set: set = None) -> bool:
-        """
-        # TODO
-        """
+    # def is_active_path(self,path: list, adjustment_set: set = None) -> bool:
+    #     """
+    #     # TODO
+    #     """
+    #     if adjustment_set is None:
+    #         adjustment_set = set()
+
+    #     colliders = set()
+    #     has_seen_right_arrow = False
+    #     for i in range(len(path) - 1):
+    #         a = path[i]
+    #         b = path[i + 1]
+    #         # check connectivity and direction
+    #         a_to_b = self.is_pointed_edge(a, b)
+    #         b_to_a = self.is_pointed_edge(b, a)
+    #         if a_to_b and b_to_a:
+    #             # bidirectional (treat like <->)
+    #             pass
+    #         elif a_to_b and not b_to_a:
+    #             # a -> b
+    #             if (i > 0) and (path[i] in adjustment_set):
+    #                 return False
+    #             has_seen_right_arrow = True
+    #         elif (not a_to_b) and b_to_a:
+    #             # a <- b
+    #             if has_seen_right_arrow:
+    #                 colliders.add(path[i])
+    #                 has_seen_right_arrow = False
+    #         else:
+    #             # no directed arrow either way; check if there is an adjacency (undirected/uncertain without arrows)
+    #             if self.is_adjacent(a, b):
+    #                 # treat as non-collider segment: if the middle node is in adjustment_set, path is blocked
+    #                 if (i > 0) and (path[i] in adjustment_set):
+    #                     return False
+    #                 # non-collider resets seen-right-arrow
+    #                 has_seen_right_arrow = False
+    #                 continue
+    #             # not connected at all
+    #             raise ValueError("Path is not a path in graph: {} and {} are not connected.".format(a, b))
+    #     # For each collider, at least one descendant is in adjustment_set (or collider itself)
+    #     for c in colliders:
+    #         if c in adjustment_set:
+    #             continue
+    #         for d in self.get_descendants(c):
+    #             if d in adjustment_set:
+    #                 break
+    #         else:
+    #             return False
+    #     return True
+    
+    def is_active_path(self, path: list, adjustment_set: set = None) -> bool:
         if adjustment_set is None:
             adjustment_set = set()
 
@@ -203,34 +250,33 @@ class Graph:
         for i in range(len(path) - 1):
             a = path[i]
             b = path[i + 1]
-            # check connectivity and direction
             a_to_b = self.is_pointed_edge(a, b)
             b_to_a = self.is_pointed_edge(b, a)
             if a_to_b and b_to_a:
-                # bidirectional (treat like <->)
                 pass
             elif a_to_b and not b_to_a:
-                # a -> b
+                # a -> b : path[i] a une arête sortante => jamais collisionneur ici
                 if (i > 0) and (path[i] in adjustment_set):
                     return False
                 has_seen_right_arrow = True
             elif (not a_to_b) and b_to_a:
                 # a <- b
                 if has_seen_right_arrow:
+                    # arête de gauche entrante + arête de droite entrante => collisionneur
                     colliders.add(path[i])
-                    has_seen_right_arrow = False
-            else:
-                # no directed arrow either way; check if there is an adjacency (undirected/uncertain without arrows)
-                if self.is_adjacent(a, b):
-                    # treat as non-collider segment: if the middle node is in adjustment_set, path is blocked
+                else:
+                    # arête de gauche non confirmée entrante => path[i] non-collisionneur (chaîne)
                     if (i > 0) and (path[i] in adjustment_set):
                         return False
-                    # non-collider resets seen-right-arrow
+                has_seen_right_arrow = False
+            else:
+                if self.is_adjacent(a, b):
+                    if (i > 0) and (path[i] in adjustment_set):
+                        return False
                     has_seen_right_arrow = False
                     continue
-                # not connected at all
                 raise ValueError("Path is not a path in graph: {} and {} are not connected.".format(a, b))
-        # For each collider, at least one descendant is in adjustment_set (or collider itself)
+
         for c in colliders:
             if c in adjustment_set:
                 continue
@@ -355,23 +401,35 @@ class Graph:
                 return sublist
         return set(ancestor_recursive(vertex, []))
 
+    # def get_descendants(self, vertex: Hashable) -> set:
+    #     """
+    #     sds
+    #     :param vertex:
+    #     :return:
+    #     """
+    #     def descendant_recursive(vertex_i: Hashable, sublist: list):
+    #         sublist.append(vertex_i)
+    #         if self.get_children(vertex_i):
+    #             for child in self.get_children(vertex_i):
+    #                 if child not in sublist:
+    #                     return sublist + descendant_recursive(child, sublist)
+    #                 else:
+    #                     return sublist
+    #         else:
+    #             return sublist
+    #     return set(descendant_recursive(vertex, []))
+    
     def get_descendants(self, vertex: Hashable) -> set:
-        """
-        sds
-        :param vertex:
-        :return:
-        """
-        def descendant_recursive(vertex_i: Hashable, sublist: list):
-            sublist.append(vertex_i)
-            if self.get_children(vertex_i):
-                for child in self.get_children(vertex_i):
-                    if child not in sublist:
-                        return sublist + descendant_recursive(child, sublist)
-                    else:
-                        return sublist
-            else:
-                return sublist
-        return set(descendant_recursive(vertex, []))
+        descendants = set()
+
+        def dfs(v):
+            for child in self.get_children(v):
+                if child not in descendants:
+                    descendants.add(child)
+                    dfs(child)
+
+        dfs(vertex)
+        return descendants
 
     def get_non_descendants(self, vertex: Hashable) -> set:
         return self.get_vertices().difference(self.get_descendants(vertex))
@@ -712,12 +770,209 @@ class Graph:
         plt.axis('off')
         plt.show()
 
-    def draw_graph(self, treatment: set = None, outcome: set = None):
+    # def draw_graph(self, treatment: set = None, outcome: set = None):
+    #     import matplotlib.pyplot as plt
+    #     import numpy as np
+    #     import networkx as nx
+    #     from matplotlib.patches import FancyArrowPatch
+
+    #     vertex_color = "lightblue"
+    #     font_color = "black"
+    #     directed_edge_color = "gray"
+    #     confounded_edge_color = "black"
+    #     undirected_edge_color = "black"
+    #     uncertain_edge_color = "#F7B617"
+    #     treatment_color = "#c82804"
+    #     outcome_color = "#4851a1"
+
+    #     all_nodes = list(self._g.nodes)
+    #     outcome = set(outcome or [])
+    #     treatment = set(treatment or [])
+    #     non_outcome_nodes = [n for n in all_nodes if n not in outcome]
+
+    #     # Layout
+    #     circular_pos = nx.circular_layout(self._g.subgraph(non_outcome_nodes))
+    #     center = np.array([0.0, 0.0])
+    #     pos = {n: center for n in outcome}
+    #     pos.update(circular_pos)
+
+    #     fig, ax = plt.subplots()
+
+    #     nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(treatment), node_color=treatment_color)
+    #     nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(outcome), node_color=outcome_color)
+
+    #     set_vertices = set(self._g.nodes) - treatment - outcome
+    #     nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(set_vertices), node_color=vertex_color)
+    #     nx.draw_networkx_labels(self._g, pos, ax=ax, font_color=font_color)
+
+    #     directed_edges = list(self.get_directed_edges())
+    #     confounded_edges = self.get_confounded_edges()
+    #     undirected_edges = self.get_undirected_edges()
+
+    #     # Split directed edges into self-loops and non-self-loops
+    #     directed_self_loops = [(u, v) for (u, v) in directed_edges if u == v]
+    #     directed_non_self = [(u, v) for (u, v) in directed_edges if u != v]
+
+    #     acyclic_edges = [(u, v) for (u, v) in directed_non_self if (v, u) not in directed_edges]
+    #     cyclic_edges = [(u, v) for (u, v) in directed_non_self if (v, u) in directed_edges]
+
+    #     nx.draw_networkx_edges(
+    #         self._g, pos, ax=ax,
+    #         edgelist=acyclic_edges,
+    #         edge_color=directed_edge_color,
+    #         arrowstyle='->'
+    #     )
+
+    #     nx.draw_networkx_edges(
+    #         self._g, pos, ax=ax,
+    #         edgelist=cyclic_edges,
+    #         edge_color=directed_edge_color,
+    #         arrowstyle='->',
+    #         connectionstyle="arc3,rad=0.35"
+    #     )
+
+    #     # ---- draw directed self-loops manually ----
+    #     for u, _ in directed_self_loops:
+    #         x, y = pos[u]
+
+    #         # small offset so the loop is visible outside the node
+    #         dx = 0.05
+    #         dy = 0.05
+
+    #         loop = FancyArrowPatch(
+    #             (x, y + dy),  # start slightly above node
+    #             (x + dx, y),  # end slightly to the right
+    #             connectionstyle="arc3,rad=-2.5",
+    #             arrowstyle='->',
+    #             mutation_scale=18,
+    #             color=directed_edge_color,
+    #             linewidth=1.8,
+    #             zorder=4
+    #         )
+    #         loop.set_clip_on(False)
+    #         ax.add_patch(loop)
+
+    #     # Draw confounded edges
+    #     try:
+    #         confounded_list = list(confounded_edges)
+    #     except Exception:
+    #         confounded_list = []
+
+    #     for idx, (u, v) in enumerate(confounded_list):
+    #         if u not in pos or v not in pos:
+    #             continue
+
+    #         # self-loop confounding, if needed
+    #         if u == v:
+    #             x, y = pos[u]
+    #             dx = 0.14
+    #             dy = -0.14
+    #             arrow = FancyArrowPatch(
+    #                 (x, y + dy),
+    #                 (x - dx, y),
+    #                 connectionstyle="arc3,rad=2.5",
+    #                 arrowstyle='<->',
+    #                 mutation_scale=18,
+    #                 color=confounded_edge_color,
+    #                 linewidth=1.5,
+    #                 linestyle='dashed',
+    #                 zorder=4
+    #             )
+    #             arrow.set_clip_on(False)
+    #             ax.add_patch(arrow)
+    #             continue
+
+    #         rad = 0.18 if (idx % 2 == 0) else -0.18
+    #         xyA = tuple(pos[u])
+    #         xyB = tuple(pos[v])
+    #         shrink_pts = 8
+
+    #         arrow = FancyArrowPatch(
+    #             xyA, xyB,
+    #             connectionstyle=f"arc3,rad={rad}",
+    #             arrowstyle='<->',
+    #             mutation_scale=18,
+    #             color=confounded_edge_color,
+    #             linewidth=1.5,
+    #             shrinkA=shrink_pts,
+    #             shrinkB=shrink_pts,
+    #             linestyle='dashed'
+    #         )
+    #         arrow.set_zorder(3)
+    #         arrow.set_clip_on(False)
+    #         ax.add_patch(arrow)
+
+    #     nx.draw_networkx_edges(
+    #         self._g, pos, ax=ax,
+    #         edgelist=undirected_edges,
+    #         arrowstyle='-',
+    #         edge_color=undirected_edge_color
+    #     )
+
+    #     dashed_arrow = [(u, v) for (u, v, t) in self.get_edges() if t == '-->']
+    #     dashed_self_loops = [(u, v) for (u, v) in dashed_arrow if u == v]
+    #     dashed_arrow = [(u, v) for (u, v) in dashed_arrow if u != v]
+
+    #     nx.draw_networkx_edges(
+    #         self._g, pos, ax=ax,
+    #         edgelist=dashed_arrow,
+    #         edge_color=uncertain_edge_color,
+    #         style='dashed',
+    #         arrowstyle='->'
+    #     )
+
+    #     for u, _ in dashed_self_loops:
+    #         x, y = pos[u]
+    #         dx = -0.12
+    #         dy = 0.12
+    #         loop = FancyArrowPatch(
+    #             (x, y + dy),
+    #             (x + dx, y),
+    #             connectionstyle="arc3,rad=2.5",
+    #             arrowstyle='->',
+    #             mutation_scale=18,
+    #             color=uncertain_edge_color,
+    #             linewidth=1.5,
+    #             linestyle='dashed',
+    #             zorder=4
+    #         )
+    #         loop.set_clip_on(False)
+    #         ax.add_patch(loop)
+
+    #     arrow_double_bar = [(u, v) for (u, v, t) in self.get_edges() if t == '-||']
+    #     nx.draw_networkx_edges(
+    #         self._g, pos, ax=ax,
+    #         edgelist=arrow_double_bar,
+    #         edge_color="red",
+    #         style='solid',
+    #         arrowstyle='-['
+    #     )
+
+    #     # expand limits slightly so loops are not cut off
+    #     xs = [p[0] for p in pos.values()]
+    #     ys = [p[1] for p in pos.values()]
+    #     if xs and ys:
+    #         ax.set_xlim(min(xs) - 0.4, max(xs) + 0.4)
+    #         ax.set_ylim(min(ys) - 0.4, max(ys) + 0.4)
+
+    #     plt.axis('off')
+    #     plt.show()
+    
+    def draw_graph(self, treatment: set = None, outcome: set = None, time_graph: bool = False):
+        """
+        Draw the causal graph.
+
+        If time_graph=False (default): circular layout with outcome nodes centered.
+        If time_graph=True: temporal layout where x = time, y = variable name,
+            so all time-steps of the same series are aligned horizontally and
+            all variables at the same time are aligned vertically.
+        """
         import matplotlib.pyplot as plt
         import numpy as np
         import networkx as nx
         from matplotlib.patches import FancyArrowPatch
 
+        # Colors and styles
         vertex_color = "lightblue"
         font_color = "black"
         directed_edge_color = "gray"
@@ -730,73 +985,63 @@ class Graph:
         all_nodes = list(self._g.nodes)
         outcome = set(outcome or [])
         treatment = set(treatment or [])
-        non_outcome_nodes = [n for n in all_nodes if n not in outcome]
 
-        # Layout
-        circular_pos = nx.circular_layout(self._g.subgraph(non_outcome_nodes))
-        center = np.array([0.0, 0.0])
-        pos = {n: center for n in outcome}
-        pos.update(circular_pos)
+        if time_graph:
+            if not all_nodes:
+                return
+
+            # x = time, y = variable name
+            times = sorted({n.time for n in all_nodes})
+            time_to_x = {t: float(i) for i, t in enumerate(times)}
+
+            var_names = sorted({n.name for n in all_nodes})
+            name_to_y = {name: float(len(var_names) - 1 - i) for i, name in enumerate(var_names)}
+
+            pos = {n: np.array([time_to_x[n.time], name_to_y[n.name]]) for n in all_nodes}
+            labels = {n: f"{n.name}_{n.time}" for n in all_nodes}
+        else:
+            # Circular layout, outcome nodes centered
+            non_outcome_nodes = [n for n in all_nodes if n not in outcome]
+            circular_pos = nx.circular_layout(self._g.subgraph(non_outcome_nodes))
+            pos = {n: np.array([0.0, 0.0]) for n in outcome}
+            pos.update(circular_pos)
+            labels = None  # default node labels
 
         fig, ax = plt.subplots()
 
+        # Nodes
         nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(treatment), node_color=treatment_color)
         nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(outcome), node_color=outcome_color)
 
         set_vertices = set(self._g.nodes) - treatment - outcome
         nx.draw_networkx_nodes(self._g, pos, ax=ax, nodelist=list(set_vertices), node_color=vertex_color)
-        nx.draw_networkx_labels(self._g, pos, ax=ax, font_color=font_color)
+        nx.draw_networkx_labels(self._g, pos, labels=labels, ax=ax, font_color=font_color)
 
+        # Directed edges (split self-loops / cyclic pairs / normal)
         directed_edges = list(self.get_directed_edges())
-        confounded_edges = self.get_confounded_edges()
-        undirected_edges = self.get_undirected_edges()
-
-        # Split directed edges into self-loops and non-self-loops
         directed_self_loops = [(u, v) for (u, v) in directed_edges if u == v]
         directed_non_self = [(u, v) for (u, v) in directed_edges if u != v]
-
         acyclic_edges = [(u, v) for (u, v) in directed_non_self if (v, u) not in directed_edges]
         cyclic_edges = [(u, v) for (u, v) in directed_non_self if (v, u) in directed_edges]
 
-        nx.draw_networkx_edges(
-            self._g, pos, ax=ax,
-            edgelist=acyclic_edges,
-            edge_color=directed_edge_color,
-            arrowstyle='->'
-        )
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=acyclic_edges,
+                                edge_color=directed_edge_color, arrowstyle='->')
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=cyclic_edges,
+                        edge_color=directed_edge_color, arrowstyle='->',
+                        connectionstyle="arc3,rad=0.35" if not time_graph else "arc3")
 
-        nx.draw_networkx_edges(
-            self._g, pos, ax=ax,
-            edgelist=cyclic_edges,
-            edge_color=directed_edge_color,
-            arrowstyle='->',
-            connectionstyle="arc3,rad=0.35"
-        )
-
-        # ---- draw directed self-loops manually ----
         for u, _ in directed_self_loops:
             x, y = pos[u]
-
-            # small offset so the loop is visible outside the node
-            dx = 0.05
-            dy = 0.05
-
-            loop = FancyArrowPatch(
-                (x, y + dy),  # start slightly above node
-                (x + dx, y),  # end slightly to the right
-                connectionstyle="arc3,rad=-2.5",
-                arrowstyle='->',
-                mutation_scale=18,
-                color=directed_edge_color,
-                linewidth=1.8,
-                zorder=4
-            )
+            loop = FancyArrowPatch((x, y + 0.05), (x + 0.05, y),
+                                    connectionstyle="arc3,rad=-2.5", arrowstyle='->',
+                                    mutation_scale=18, color=directed_edge_color,
+                                    linewidth=1.8, zorder=4)
             loop.set_clip_on(False)
             ax.add_patch(loop)
 
-        # Draw confounded edges
+        # Confounded edges
         try:
-            confounded_list = list(confounded_edges)
+            confounded_list = list(self.get_confounded_edges())
         except Exception:
             confounded_list = []
 
@@ -804,98 +1049,66 @@ class Graph:
             if u not in pos or v not in pos:
                 continue
 
-            # self-loop confounding, if needed
             if u == v:
                 x, y = pos[u]
-                dx = 0.14
-                dy = -0.14
-                arrow = FancyArrowPatch(
-                    (x, y + dy),
-                    (x - dx, y),
-                    connectionstyle="arc3,rad=2.5",
-                    arrowstyle='<->',
-                    mutation_scale=18,
-                    color=confounded_edge_color,
-                    linewidth=1.5,
-                    linestyle='dashed',
-                    zorder=4
-                )
-                arrow.set_clip_on(False)
-                ax.add_patch(arrow)
-                continue
-
-            rad = 0.18 if (idx % 2 == 0) else -0.18
-            xyA = tuple(pos[u])
-            xyB = tuple(pos[v])
-            shrink_pts = 8
-
-            arrow = FancyArrowPatch(
-                xyA, xyB,
-                connectionstyle=f"arc3,rad={rad}",
-                arrowstyle='<->',
-                mutation_scale=18,
-                color=confounded_edge_color,
-                linewidth=1.5,
-                shrinkA=shrink_pts,
-                shrinkB=shrink_pts,
-                linestyle='dashed'
-            )
-            arrow.set_zorder(3)
+                arrow = FancyArrowPatch((x, y - 0.14), (x - 0.14, y),
+                                        connectionstyle="arc3,rad=2.5", arrowstyle='<->',
+                                        mutation_scale=18, color=confounded_edge_color,
+                                        linewidth=1.5, linestyle='dashed', zorder=4)
+            else:
+                rad = 0.18 if (idx % 2 == 0) else -0.18
+                xyA, xyB = tuple(pos[u]), tuple(pos[v])
+                arrow = FancyArrowPatch(xyA, xyB,
+                                        connectionstyle=f"arc3,rad={rad}", arrowstyle='<->',
+                                        mutation_scale=18, color=confounded_edge_color,
+                                        linewidth=1.5, shrinkA=8, shrinkB=8,
+                                        linestyle='dashed')
+                arrow.set_zorder(3)
             arrow.set_clip_on(False)
             ax.add_patch(arrow)
 
-        nx.draw_networkx_edges(
-            self._g, pos, ax=ax,
-            edgelist=undirected_edges,
-            arrowstyle='-',
-            edge_color=undirected_edge_color
-        )
+        # Undirected edges
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=self.get_undirected_edges(),
+                                arrowstyle='-', edge_color=undirected_edge_color)
 
+        # Uncertain (dashed arrow) edges
         dashed_arrow = [(u, v) for (u, v, t) in self.get_edges() if t == '-->']
         dashed_self_loops = [(u, v) for (u, v) in dashed_arrow if u == v]
         dashed_arrow = [(u, v) for (u, v) in dashed_arrow if u != v]
 
-        nx.draw_networkx_edges(
-            self._g, pos, ax=ax,
-            edgelist=dashed_arrow,
-            edge_color=uncertain_edge_color,
-            style='dashed',
-            arrowstyle='->'
-        )
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=dashed_arrow,
+                                edge_color=uncertain_edge_color, style='dashed', arrowstyle='->')
 
         for u, _ in dashed_self_loops:
             x, y = pos[u]
-            dx = -0.12
-            dy = 0.12
-            loop = FancyArrowPatch(
-                (x, y + dy),
-                (x + dx, y),
-                connectionstyle="arc3,rad=2.5",
-                arrowstyle='->',
-                mutation_scale=18,
-                color=uncertain_edge_color,
-                linewidth=1.5,
-                linestyle='dashed',
-                zorder=4
-            )
+            loop = FancyArrowPatch((x, y + 0.12), (x - 0.12, y),
+                                    connectionstyle="arc3,rad=2.5", arrowstyle='->',
+                                    mutation_scale=18, color=uncertain_edge_color,
+                                    linewidth=1.5, linestyle='dashed', zorder=4)
             loop.set_clip_on(False)
             ax.add_patch(loop)
 
+        # Double-bar edges
         arrow_double_bar = [(u, v) for (u, v, t) in self.get_edges() if t == '-||']
-        nx.draw_networkx_edges(
-            self._g, pos, ax=ax,
-            edgelist=arrow_double_bar,
-            edge_color="red",
-            style='solid',
-            arrowstyle='-['
-        )
+        nx.draw_networkx_edges(self._g, pos, ax=ax, edgelist=arrow_double_bar,
+                                edge_color="red", style='solid', arrowstyle='-[')
 
-        # expand limits slightly so loops are not cut off
-        xs = [p[0] for p in pos.values()]
-        ys = [p[1] for p in pos.values()]
-        if xs and ys:
-            ax.set_xlim(min(xs) - 0.4, max(xs) + 0.4)
-            ax.set_ylim(min(ys) - 0.4, max(ys) + 0.4)
+        # Axis limits / ticks
+        if time_graph:
+            ax.set_xlim(min(time_to_x.values()) - 0.5, max(time_to_x.values()) + 0.5)
+            ax.set_ylim(min(name_to_y.values()) - 0.5, max(name_to_y.values()) + 0.5)
+            ax.set_xticks(list(time_to_x.values()))
+            ax.set_xticklabels([str(t) for t in times])
+            ax.set_yticks(list(name_to_y.values()))
+            ax.set_yticklabels(var_names)
+            ax.set_xlabel('time')
+            ax.set_ylabel('variable')
+        else:
+            xs = [p[0] for p in pos.values()]
+            ys = [p[1] for p in pos.values()]
+            if xs and ys:
+                ax.set_xlim(min(xs) - 0.4, max(xs) + 0.4)
+                ax.set_ylim(min(ys) - 0.4, max(ys) + 0.4)
 
         plt.axis('off')
         plt.show()

@@ -4,7 +4,9 @@ import pandas as pd
 from itertools import combinations
 
 from pyciphod.utils.graphs.partially_specified_graphs import CompletedPartiallyDirectedAcyclicGraph, PartialAncestralGraphs
-from pyciphod.utils.graphs.orientation_rules import meek_rule_1, meek_rule_2, meek_rule_3
+from pyciphod.utils.graphs.orientation_rules import (
+    meek_rule_1, meek_rule_2, meek_rule_3, bk_orientation_rules,
+)
 from pyciphod.utils.stat_tests.independence_tests import CiTests, FisherZTest as FisherZ
 from pyciphod.utils.graphs.background_knowledge import BackgroundKnowledge
 
@@ -64,7 +66,8 @@ class PC(ConstraintBased):
 
     def __init__(self, sparsity: float = 0.05, ci_test: CiTests = FisherZ, background_knowledge: BackgroundKnowledge = None, twd = False):
         super().__init__(sparsity, ci_test, background_knowledge, twd)
-        # Additional attributes for FCI can be defined here, such as the PAG representation and rules for handling latent confounders and selection bias.
+        self._data = None
+        self._max_sepset_size = None
 
     def _initialize_graph(self):
         """Return the graph object used by the algorithm."""
@@ -73,12 +76,31 @@ class PC(ConstraintBased):
     def _skeleton(self, data: pd.DataFrame = None, max_sepset_size: int = None):
         """
         Construct the skeleton of the graph using an order-independent approach
-        following Colombo & Maathuis (2014). Iteratively removes edges based on CI tests.
+        following Colombo & Maathuis (2014). Iteratively removes edges based on
+        CI tests.
+
+        Background knowledge (BK) is used during this phase rather than only as
+        postprocessing: pairs already constrained by BK (mandatory or forbidden
+        edges) are skipped so a CI test never contradicts BK, and candidate
+        separating sets exclude nodes whose relation to x is already fixed by
+        BK. Forbidden edges skipped here are resolved afterwards in
+        `_missing_sepset_bk`. Following Schubert et al., "Integrating
+        Background Knowledge for Scalable Causal Discovery."
         """
         if max_sepset_size is None:
             max_sepset_size = len(data.columns) - 2
         nodes = list(data.columns)
         self.g_hat.add_undirected_edges_from(list(combinations(nodes, 2)))
+
+        # Kept for _apply_background_knowledge / _missing_sepset_bk, called
+        # afterwards with no extra arguments from run().
+        self._data = data
+        self._max_sepset_size = max_sepset_size
+
+        forbidden_edges = self._bk.get_forbidden_edges()
+        mandatory_edges = self._bk.get_mandatory_edges()
+        mandatory_orientation = self._bk.get_mandatory_orientations()
+
         data_test = data
         s = 0
         repeat = True
@@ -90,11 +112,33 @@ class PC(ConstraintBased):
                 if len(adj[x]) - 1 >= s:
                     repeat = True
                     for y in sorted(adj[x]):
-                        for S in combinations([a for a in sorted(adj[x]) if a != y], s):
+                        # BK step: skip pairs already constrained by BK so a
+                        # CI test never contradicts a mandatory/forbidden
+                        # constraint. Following Schubert et al.
+                        if any(
+                            edge in mandatory_edges or edge in forbidden_edges
+                            for edge in ((x, y), (y, x))
+                        ):
+                            continue
+
+                        # Candidate separating sets stay within adj(x) (as
+                        # before), excluding nodes whose relation to x is
+                        # already fixed/forbidden by BK.
+                        candidate_S = [
+                            a for a in sorted(adj[x])
+                            if (
+                                a != y
+                                and (x, a) not in mandatory_orientation
+                                and (x, a) not in forbidden_edges
+                                and (a, x) not in forbidden_edges
+                            )
+                        ]
+
+                        for S in combinations(candidate_S, s):
                             if (y, x, S) not in treated:
                                 treated.append((x, y, S))
                                 test = self._ci_test(x, y, list(S), self._twd)
-                                self.performed_tests.add((x,y,S))
+                                self.performed_tests.add((x, y, S))
                                 self.nb_ci_tests += 1
                                 if self._twd:
                                     data_test = data.dropna(subset=[x, y] + list(S))
@@ -109,40 +153,87 @@ class PC(ConstraintBased):
                                     break
             s += 1
 
+    def _missing_sepset_bk(self, data: pd.DataFrame = None, max_sepset_size: int = None):
+        """
+        Resolve edges skipped by BK during `_skeleton`.
+
+        Forbidden edges are never tested in `_skeleton` (see the BK step
+        there), so they remain in the graph afterwards. This method searches
+        for a BK-consistent separating set for each of them and removes the
+        edge if one is found. If no such sepset is found up to
+        `max_sepset_size`, the edge is left in place (data/BK contradiction):
+        forcing its removal without a valid sepset would compromise the
+        soundness of the collider-orientation step.
+        """
+        if not self._bk or data is None:
+            return
+
+        nodes = list(data.columns)
+        if max_sepset_size is None:
+            max_sepset_size = len(nodes) - 2
+
+        forbidden_edges = self._bk.get_forbidden_edges()
+        mandatory_orientation = self._bk.get_mandatory_orientations()
+
+        data_test = data
+        s = 0
+        repeat = True
+        while repeat and s <= max_sepset_size:
+            repeat = False
+            adj = {x: self.g_hat.get_adjacencies(x) for x in nodes}
+
+            for x, y in forbidden_edges:
+                if not self.g_hat.is_adjacent(x, y):
+                    continue
+
+                candidate_S = [
+                    a for a in sorted(adj[x])
+                    if (
+                        a != y
+                        and (x, a) not in mandatory_orientation
+                        and (x, a) not in forbidden_edges
+                        and (a, x) not in forbidden_edges
+                    )
+                ]
+
+                if len(candidate_S) >= s:
+                    repeat = True
+
+                for S in combinations(candidate_S, s):
+                    test = self._ci_test(x, y, list(S), self._twd)
+                    self.performed_tests.add((x, y, S))
+                    self.nb_ci_tests += 1
+                    if self._twd:
+                        data_test = data.dropna(subset=[x, y] + list(S))
+                    try:
+                        pval = test.get_pvalue(data_test)
+                    except:
+                        pval = test.get_pvalue_by_permutation(data_test)
+                    if pval > self._sparsity:
+                        self.g_hat.remove_undirected_edge(x, y)
+                        self.sepset[(x, y)] = self.sepset[(y, x)] = S
+                        break
+
+            s += 1
+
     def _apply_background_knowledge(self):
         """
-        Apply background knowledge constraints to the CPDAG:
-        1) Remove forbidden edges and add mandatory edges in the skeleton.
-        2) Orient edges according to mandatory and forbidden orientations if present.
+        Apply the structural part of background knowledge to the skeleton:
+        1) Add mandatory edges if still missing (safety net; `_skeleton`
+           already avoids testing/removing them).
+        2) Resolve forbidden edges skipped by BK during `_skeleton`.
+
+        BK-driven orientations (mandatory/forbidden orientations) are applied
+        later, in `_orientation`, via `bk_orientation_rules`.
         """
         if not self._bk:
-            return 
+            return
 
-        # --- Step 1: enforce mandatory edges ---
-
-        # Add mandatory edges if missing
         for u, v in self._bk.get_mandatory_edges():
             if (u, v) not in self.g_hat.get_undirected_edges() and (v, u) not in self.g_hat.get_undirected_edges():
                 self.g_hat.add_undirected_edge(u, v)
 
-        # --- Step 2: enforce orientations ---
-        # Mandatory orientations
-        for u, v in self._bk.get_mandatory_orientations():
-            if (u, v) in self.g_hat.get_undirected_edges() or (v, u) in self.g_hat.get_undirected_edges():
-                self.g_hat.remove_undirected_edge(u, v)
-                self.g_hat.remove_undirected_edge(v, u)
-                self.g_hat.add_directed_edge(u, v)
-
-        # Forbidden orientations
-        for u, v in self._bk.get_forbidden_orientations():
-            if (u, v) in self.g_hat.get_undirected_edges():
-                # Orient as v -> u instead
-                self.g_hat.remove_undirected_edge(u, v)
-                self.g_hat.add_directed_edge(v, u)
-            elif (v, u) in self.g_hat.get_undirected_edges():
-                # Orient as u -> v instead
-                self.g_hat.remove_undirected_edge(v, u)
-                self.g_hat.add_directed_edge(u, v)
+        self._missing_sepset_bk(data=self._data, max_sepset_size=self._max_sepset_size)
 
     def _uc_rule(self, solve_conflict="bidirected"):
         """
@@ -157,15 +248,11 @@ class PC(ConstraintBased):
                 for z in sorted(adj[y]):
                     if z == x or z in sorted(adj[x]):
                         continue
-                    if (y not in self.sepset.get((x, z), [])):# and (y not in self.sepset.get((z, x), [])):
-                        # TODO: add many ways to handle conflics
-                        # Overwrite, Priority,
+                    if (y not in self.sepset.get((x, z), [])):
                         if solve_conflict=="bidirected":
                             test_conflict = True
                         elif solve_conflict=="priority":
                             test_conflict = ((x, y) in self.g_hat.get_undirected_edges()) and ((z, y) in self.g_hat.get_undirected_edges())
-                        # if ((x, y) in self.g_hat.get_undirected_edges()) and ((z, y) in self.g_hat.get_undirected_edges()):
-                        # if ((x, y) not in self.g_hat.get_directed_edges()) and ((z, y) not in self.g_hat.get_directed_edges())
                         if test_conflict:
                                 self.g_hat.remove_undirected_edge(x, y)
                                 self.g_hat.remove_undirected_edge(y, z)
@@ -182,25 +269,20 @@ class PC(ConstraintBased):
         nodes = self.g_hat.get_vertices()
         changed = False
         adj = {x: self.g_hat.get_adjacencies(x) for x in nodes}
-        
+
         for x in nodes:
             for y in sorted(adj[x]):
-                # Rule 1:
                 for z in sorted(set(adj[y]) - set(adj[x])):
                     if meek_rule_1(self.g_hat, x, y, z):
-                    # if (x,y) in self.g_hat.get_directed_edges() and (y,z) in self.g_hat.get_undirected_edges():
                         changed = True
                         self.g_hat.remove_undirected_edge(z, y)
                         self.g_hat.add_directed_edge(y, z)
-                # Rule 2:
                 for z in sorted(set(adj[y]) & set(adj[x])):
                     if meek_rule_2(self.g_hat, x, y, z):
-                    # if (x,y) in self.g_hat.get_directed_edges() and (y,z) in self.g_hat.get_directed_edges() and (x,z) in self.g_hat.get_undirected_edges():
                         changed = True
                         self.g_hat.remove_undirected_edge(x, z)
                         self.g_hat.add_directed_edge(x, z)
-        
-        # Rule 3: 
+
         for x in nodes:
             for y in adj[x]:
                 if (x, y) not in self.g_hat.get_directed_edges():
@@ -210,19 +292,17 @@ class PC(ConstraintBased):
                         continue
                     for w in sorted(set(adj[x]) & set(adj[y]) & set(adj[z])):
                         if meek_rule_3(self.g_hat, x, y, z, w):
-                        # undirected_triplet = [(w, y), (w, x), (z, w)]
-                        # if all(edge in self.g_hat.get_undirected_edges() for edge in undirected_triplet):
                             changed = True
                             self.g_hat.remove_undirected_edge(w, y)
                             self.g_hat.add_directed_edge(w, y)
         return changed
 
     def _orientation(self):
-        """Orient edges using the UC rule and iterative Meek rules until convergence."""
+        """Orient edges using the UC rule, background knowledge, and iterative Meek rules until convergence."""
         self._uc_rule()
+        bk_orientation_rules(g=self.g_hat, bk=self._bk)
         repeat = True
         while repeat:
-            # self.g_hat, changed = apply_meek_rules(self.g_hat)
             repeat = self._apply_meek_rules()
 
 

@@ -1,0 +1,42 @@
+\documentclass[tikz,border=5pt]{standalone}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.17}
+\definecolor{case0}{HTML}{1F77B4}
+\definecolor{case1}{HTML}{FF7F0E}
+\definecolor{case2}{HTML}{2CA02C}
+\definecolor{case3}{HTML}{D62728}
+\begin{document}
+\begin{tikzpicture}
+\begin{axis}[
+  width=14cm, height=8cm,
+  xlabel={p},
+  ylabel={Correct proportion (per edge)},
+  title={Correct proportion by case -- Our method vs TPC vs p},
+  xtick={0,1,2,3},
+  xticklabels={5,10,15,20},
+  xmin=-0.6, xmax=3.6,
+  ymajorgrids, grid style={gray!30},
+  unbounded coords=discard,
+  legend style={at={(1.02,0.5)}, anchor=west, font=\scriptsize},
+  legend cell align=left,
+  ymin=-0.05, ymax=1.05
+]
+\addplot[only marks, color=case0, mark=*, mark options={solid}, error bars/.cd, y dir=both, y explicit] table[col sep=comma, x=xc0ours, y=yc0ours, y error plus=epc0ours, y error minus=emc0ours] {sweep_p_correctness_data.csv};
+\addlegendentry{0: not adjacent -- Our method}
+\addplot[only marks, color=case0, mark=square, mark options={solid}, error bars/.cd, y dir=both, y explicit] table[col sep=comma, x=xc0tpc, y=yc0tpc, y error plus=epc0tpc, y error minus=emc0tpc] {sweep_p_correctness_data.csv};
+\addlegendentry{0: not adjacent -- TPC}
+\addplot[only marks, color=case1, mark=*, mark options={solid}, error bars/.cd, y dir=both, y explicit] table[col sep=comma, x=xc1ours, y=yc1ours, y error plus=epc1ours, y error minus=emc1ours] {sweep_p_correctness_data.csv};
+\addlegendentry{1: already oriented in the SCG -- Our method}
+\addplot[only marks, color=case1, mark=square, mark options={solid}, error bars/.cd, y dir=both, y explicit] table[col sep=comma, x=xc1tpc, y=yc1tpc, y error plus=epc1tpc, y error minus=emc1tpc] {sweep_p_correctness_data.csv};
+\addlegendentry{1: already oriented in the SCG -- TPC}
+\addplot[only marks, color=case2, mark=*, mark options={solid}, error bars/.cd, y dir=both, y explicit] table[col sep=comma, x=xc2ours, y=yc2ours, y error plus=epc2ours, y error minus=emc2ours] {sweep_p_correctness_data.csv};
+\addlegendentry{2: no self-loop (lag test) -- Our method}
+\addplot[only marks, color=case2, mark=square, mark options={solid}, error bars/.cd, y dir=both, y explicit] table[col sep=comma, x=xc2tpc, y=yc2tpc, y error plus=epc2tpc, y error minus=emc2tpc] {sweep_p_correctness_data.csv};
+\addlegendentry{2: no self-loop (lag test) -- TPC}
+\addplot[only marks, color=case3, mark=*, mark options={solid}, error bars/.cd, y dir=both, y explicit] table[col sep=comma, x=xc3ours, y=yc3ours, y error plus=epc3ours, y error minus=emc3ours] {sweep_p_correctness_data.csv};
+\addlegendentry{3: different parents (via $Z$) -- Our method}
+\addplot[only marks, color=case3, mark=square, mark options={solid}, error bars/.cd, y dir=both, y explicit] table[col sep=comma, x=xc3tpc, y=yc3tpc, y error plus=epc3tpc, y error minus=emc3tpc] {sweep_p_correctness_data.csv};
+\addlegendentry{3: different parents (via $Z$) -- TPC}
+\end{axis}
+\end{tikzpicture}
+\end{document}
