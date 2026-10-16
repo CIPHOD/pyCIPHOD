@@ -17,7 +17,7 @@ def back_door_criterion(graph:DirectedMixedGraph, X: Iterable, Y: Iterable, Z: I
                 return False
 
         g_manipulated = graph.copy()
-        g_manipulated.remove_outgoing_edges(x)
+        g_manipulated.remove_outgoing_edges({x})
 
         for y in Y:
             if not d_separated(g_manipulated, {x}, {y}, Z):

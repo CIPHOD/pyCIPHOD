@@ -27,6 +27,15 @@ METHOD_LABELS = {
     "mice_imputation": "MICE imputation",
 }
 
+METHOD_LABELS = {
+    "basic_mcar_recovery": "No graph recovery (assuming MCAR)",
+    "mar_ipw_recovery": "No graph recovery (assuming MAR)",
+    "mnar_recovery_mp_dag": "DAG recovery",
+    "mnar_recovery_sva1_mcdmg": "MNAR-m-C-DMG recovery",
+    "mnar_recovery_sva2_cmcdmg": "Cluster graph recovery",
+    "mice_imputation": "MICE imputation",
+}
+
 
 def expit(value):
     return 1.0 / (1.0 + np.exp(-value))
@@ -917,8 +926,8 @@ def compare_recovery_methods(data, truth, setting=1):
         "mnar_recovery_mp_dag":
             recover_joint_distribution_mnar_dag,
 
-       "mnar_recovery_sva1_mcdmg":
-           recover_joint_distribution_mnar_mcdmg,
+       # "mnar_recovery_sva1_mcdmg":
+       #     recover_joint_distribution_mnar_mcdmg,
 
         "mnar_recovery_sva2_cmcdmg":
             recover_joint_distribution_mnar_cmcdmg,
@@ -1210,13 +1219,13 @@ def plot_causal_effect_estimates(summary, setting, setting_label=None):
 
 
 if __name__ == "__main__":
-    setting = 2  # 1 is a DAG with MCAR, MAR, and MNAR missingness; 2 is a DAG with MAR and MNAR missingness
+    setting = 1  # 1 is a DAG with MCAR, MAR, and MNAR missingness; 2 is a DAG with MAR and MNAR missingness
 
     if setting == 1:
         results, summary = convergence_experiment(setting=1)
     else:
         results, summary = convergence_experiment(setting=2)
-    print(summary)
+    print(summary.to_string(index=False))
 
     columns = [
         "n",
