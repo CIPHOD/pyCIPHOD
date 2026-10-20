@@ -191,53 +191,68 @@ class Graph:
         """True if there is any adjacency between u and v (directed, confounded, undirected, uncertain)."""
         return vertex_i in self.get_adjacencies(vertex_j)
 
-    def is_active_path(self,path: list, adjustment_set: set = None) -> bool:
-        """
-        # TODO
-        """
-        if adjustment_set is None:
-            adjustment_set = set()
+    # def is_active_path(self,path: list, adjustment_set: set = None) -> bool:
+    #     """
+    #     # TODO
+    #     """
+    #     if adjustment_set is None:
+    #         adjustment_set = set()
 
-        colliders = set()
-        has_seen_right_arrow = False
-        for i in range(len(path) - 1):
-            a = path[i]
-            b = path[i + 1]
-            # check connectivity and direction
-            a_to_b = self.is_pointed_edge(a, b)
-            b_to_a = self.is_pointed_edge(b, a)
-            if a_to_b and b_to_a:
-                # bidirectional (treat like <->)
-                pass
-            elif a_to_b and not b_to_a:
-                # a -> b
-                if (i > 0) and (path[i] in adjustment_set):
+    #     colliders = set()
+    #     has_seen_right_arrow = False
+    #     for i in range(len(path) - 1):
+    #         a = path[i]
+    #         b = path[i + 1]
+    #         # check connectivity and direction
+    #         a_to_b = self.is_pointed_edge(a, b)
+    #         b_to_a = self.is_pointed_edge(b, a)
+    #         if a_to_b and b_to_a:
+    #             # bidirectional (treat like <->)
+    #             pass
+    #         elif a_to_b and not b_to_a:
+    #             # a -> b
+    #             if (i > 0) and (path[i] in adjustment_set):
+    #                 return False
+    #             has_seen_right_arrow = True
+    #         elif (not a_to_b) and b_to_a:
+    #             # a <- b
+    #             if has_seen_right_arrow:
+    #                 colliders.add(path[i])
+    #                 has_seen_right_arrow = False
+    #         else:
+    #             # no directed arrow either way; check if there is an adjacency (undirected/uncertain without arrows)
+    #             if self.is_adjacent(a, b):
+    #                 # treat as non-collider segment: if the middle node is in adjustment_set, path is blocked
+    #                 if (i > 0) and (path[i] in adjustment_set):
+    #                     return False
+    #                 # non-collider resets seen-right-arrow
+    #                 has_seen_right_arrow = False
+    #                 continue
+    #             # not connected at all
+    #             raise ValueError("Path is not a path in graph: {} and {} are not connected.".format(a, b))
+    #     # For each collider, at least one descendant is in adjustment_set (or collider itself)
+    #     for c in colliders:
+    #         if c in adjustment_set:
+    #             continue
+    #         for d in self.get_descendants(c):
+    #             if d in adjustment_set:
+    #                 break
+    #         else:
+    #             return False
+    #     return True
+    
+    def is_active_path(self, path: list, adjustment_set: set = None) -> bool:
+        Z = set(adjustment_set or [])
+        for i in range(1, len(path) - 1):
+            prev, m, nxt = path[i - 1], path[i], path[i + 1]
+            collider = self.is_pointed_edge(prev, m) and self.is_pointed_edge(nxt, m)
+            if collider:
+                # actif seulement si m ou un de ses descendants est conditionné
+                # (get_descendants(m) contient m)
+                if not (self.get_descendants(m) & Z):
                     return False
-                has_seen_right_arrow = True
-            elif (not a_to_b) and b_to_a:
-                # a <- b
-                if has_seen_right_arrow:
-                    colliders.add(path[i])
-                    has_seen_right_arrow = False
-            else:
-                # no directed arrow either way; check if there is an adjacency (undirected/uncertain without arrows)
-                if self.is_adjacent(a, b):
-                    # treat as non-collider segment: if the middle node is in adjustment_set, path is blocked
-                    if (i > 0) and (path[i] in adjustment_set):
-                        return False
-                    # non-collider resets seen-right-arrow
-                    has_seen_right_arrow = False
-                    continue
-                # not connected at all
-                raise ValueError("Path is not a path in graph: {} and {} are not connected.".format(a, b))
-        # For each collider, at least one descendant is in adjustment_set (or collider itself)
-        for c in colliders:
-            if c in adjustment_set:
-                continue
-            for d in self.get_descendants(c):
-                if d in adjustment_set:
-                    break
-            else:
+            elif m in Z:
+                # non-collider conditionné : bloque
                 return False
         return True
 

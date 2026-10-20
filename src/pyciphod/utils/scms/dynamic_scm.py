@@ -828,6 +828,252 @@ class CtDynamicSCM(DynamicSCM):
             raise TypeError("CtDynamicSCM requires CTimeVar latent variables.")
 
 
+# Target spectral radius used to enforce statistical stationarity.
+_STATIONARITY_RHO_MAX = 0.9
+
+
+def _template_spectral_radius(weight_template: Dict[Tuple[str, str, int], float], names: List[str]) -> float:
+    """
+    Spectral radius of the companion matrix of the VAR implied by a weight template.
+
+    weight_template maps (src_name, tgt_name, lag) -> coefficient.
+    Model: X_t = B_0 X_t + sum_k B_k X_{t-k} + noise  =>  A_k = (I - B_0)^{-1} B_k.
+    The process is (weakly) stationary iff the radius is < 1.
+    """
+    n = len(names)
+    p = max((lag for (_, _, lag) in weight_template), default=0)
+    if n == 0 or p == 0:
+        return 0.0
+
+    idx = {name: i for i, name in enumerate(names)}
+    B = [np.zeros((n, n)) for _ in range(p + 1)]  # B[k][tgt, src]
+    for (src, tgt, lag), w in weight_template.items():
+        B[lag][idx[tgt], idx[src]] = w
+
+    if not np.allclose(np.linalg.matrix_power(B[0], n), 0.0):
+        raise ValueError("Instantaneous edges between processes contain a cycle.")
+
+    inv = np.linalg.inv(np.eye(n) - B[0])
+    A = [inv @ B[k] for k in range(1, p + 1)]
+
+    C = np.zeros((n * p, n * p))
+    C[:n, :] = np.hstack(A)
+    if p > 1:
+        C[n:, :-n] = np.eye(n * (p - 1))
+    return float(np.max(np.abs(np.linalg.eigvals(C))))
+
+
+# def create_random_linear_dt_dynamic_scm_from_ftadmg(
+#     ftadmg: FtAcyclicDirectedMixedGraph,
+#     weight_low: float = -1.0,
+#     weight_high: float = 1.0,
+#     intercept_low: float = 0.0,
+#     intercept_high: float = 0.0,
+#     u_dist: Optional[Any] = None,
+#     causally_stationary: bool = True,
+#     seed: Optional[int] = None,
+# ):
+#     """
+#     Build a LinearDtDynamicSCM from an existing full-time ADMG by
+#     sampling random edge weights and intercepts.
+#
+#     Parameters
+#     ----------
+#     ftadmg : FtAcyclicDirectedMixedGraph
+#         Full-time ADMG over DTimeVar variables.
+#
+#     weight_low, weight_high : float
+#         Range from which directed causal coefficients are sampled.
+#
+#     intercept_low, intercept_high : float
+#         Range from which intercepts are sampled.
+#
+#     u_dist : optional
+#         Distribution used for exogenous variables.
+#
+#     causally_stationary : bool
+#         If True, edges corresponding to the same
+#         (source process, target process, lag) share the same coefficient
+#         across time. Intercepts are also shared across time for each
+#         process.
+#
+#     seed : int, optional
+#         Random seed.
+#
+#     Returns
+#     -------
+#     scm : LinearDtDynamicSCM
+#     coefficients : dict
+#         Mapping (src, tgt) -> coefficient.
+#     intercepts : dict
+#         Mapping variable -> intercept.
+#     """
+#
+#     rng = np.random.default_rng(seed)
+#
+#     # ---------------------------------------------------------
+#     # Observed variables
+#     # ---------------------------------------------------------
+#     v = sorted(
+#         ftadmg.get_vertices(),
+#         key=lambda node: (node.name, node.time)
+#     )
+#
+#     coefficients: Dict[
+#         Tuple[DTimeVar, DTimeVar], float
+#     ] = {}
+#
+#     u: List[DTimeVar] = []
+#
+#     # ---------------------------------------------------------
+#     # Latent variables associated with confounded edges
+#     # ---------------------------------------------------------
+#     confounded_edges = sorted(
+#         ftadmg.get_confounded_edges(),
+#         key=lambda edge: (
+#             edge[0].name,
+#             edge[0].time,
+#             edge[1].name,
+#             edge[1].time,
+#         )
+#     )
+#
+#     for tgt_1, tgt_2 in confounded_edges:
+#
+#         # Normally both endpoints should correspond to the same time
+#         latent = DTimeVar(
+#             f"U_{tgt_1.name}_{tgt_2.name}",
+#             tgt_1.time
+#         )
+#
+#         # Avoid accidental duplication
+#         suffix = 1
+#         base_name = latent.name
+#
+#         while latent in u:
+#             latent = DTimeVar(
+#                 f"{base_name}_{suffix}",
+#                 tgt_1.time
+#             )
+#             suffix += 1
+#
+#         u.append(latent)
+#
+#         coefficients[(latent, tgt_1)] = 1.0
+#         coefficients[(latent, tgt_2)] = 1.0
+#
+#     # ---------------------------------------------------------
+#     # Idiosyncratic noise variable for every observed variable
+#     # ---------------------------------------------------------
+#     for tgt in v:
+#
+#         latent = DTimeVar(
+#             f"U_{tgt.name}",
+#             tgt.time
+#         )
+#
+#         suffix = 1
+#         base_name = latent.name
+#
+#         while latent in u:
+#             latent = DTimeVar(
+#                 f"{base_name}_{suffix}",
+#                 tgt.time
+#             )
+#             suffix += 1
+#
+#         u.append(latent)
+#         coefficients[(latent, tgt)] = 1.0
+#
+#     # ---------------------------------------------------------
+#     # Directed observed -> observed edges
+#     # ---------------------------------------------------------
+#     directed_edges = sorted(
+#         ftadmg.get_directed_edges(),
+#         key=lambda edge: (
+#             edge[0].name,
+#             edge[0].time,
+#             edge[1].name,
+#             edge[1].time,
+#         )
+#     )
+#
+#     if causally_stationary:
+#
+#         # Same coefficient for the same causal relation and lag
+#         weight_template: Dict[Tuple[str, str, int], float] = {}
+#
+#         for src, tgt in directed_edges:
+#
+#             lag = tgt.time - src.time
+#
+#             key = (
+#                 src.name,
+#                 tgt.name,
+#                 lag,
+#             )
+#
+#             if key not in weight_template:
+#                 weight_template[key] = float(
+#                     rng.uniform(weight_low, weight_high)
+#                 )
+#
+#             coefficients[(src, tgt)] = weight_template[key]
+#
+#     else:
+#
+#         for src, tgt in directed_edges:
+#             coefficients[(src, tgt)] = float(
+#                 rng.uniform(weight_low, weight_high)
+#             )
+#
+#     # ---------------------------------------------------------
+#     # Intercepts
+#     # ---------------------------------------------------------
+#     all_vars = list(u) + list(v)
+#
+#     intercepts: Dict[DTimeVar, float] = {}
+#
+#     if causally_stationary:
+#
+#         # One intercept per process, reused at every time point
+#         intercept_template: Dict[str, float] = {}
+#
+#         for var in all_vars:
+#
+#             if var.name not in intercept_template:
+#                 intercept_template[var.name] = float(
+#                     rng.uniform(
+#                         intercept_low,
+#                         intercept_high
+#                     )
+#                 )
+#
+#             intercepts[var] = intercept_template[var.name]
+#
+#     else:
+#
+#         for var in all_vars:
+#             intercepts[var] = float(
+#                 rng.uniform(
+#                     intercept_low,
+#                     intercept_high
+#                 )
+#             )
+#
+#     # ---------------------------------------------------------
+#     # Construct linear dynamic SCM
+#     # ---------------------------------------------------------
+#     scm = LinearDtDynamicSCM(
+#         v=v,
+#         u=u,
+#         coefficients=coefficients,
+#         intercepts=intercepts,
+#         u_dist=u_dist,
+#     )
+#
+#     return scm, coefficients, intercepts
+
 
 def create_random_linear_dt_dynamic_scm_from_ftadmg(
     ftadmg: FtAcyclicDirectedMixedGraph,
@@ -838,6 +1084,7 @@ def create_random_linear_dt_dynamic_scm_from_ftadmg(
     u_dist: Optional[Any] = None,
     causally_stationary: bool = True,
     seed: Optional[int] = None,
+    stationarity_stat: bool = True,
 ):
     """
     Build a LinearDtDynamicSCM from an existing full-time ADMG by
@@ -865,6 +1112,14 @@ def create_random_linear_dt_dynamic_scm_from_ftadmg(
 
     seed : int, optional
         Random seed.
+
+    stationarity_stat : bool
+        If True (default), sampled lagged coefficients are rescaled (lag-k
+        coefficients multiplied by alpha**k) so that the VAR implied by the
+        latest mechanisms has spectral radius <= _STATIONARITY_RHO_MAX, which
+        makes the generated series statistically (weakly) stationary.
+        Weights are left untouched if already stable. Set to False to keep the
+        raw sampled weights (possibly non-stationary).
 
     Returns
     -------
@@ -994,6 +1249,30 @@ def create_random_linear_dt_dynamic_scm_from_ftadmg(
             )
 
     # ---------------------------------------------------------
+    # Enforce statistical stationarity (lag-k weights scaled by alpha**k)
+    # ---------------------------------------------------------
+    if stationarity_stat:
+
+        # Data generation uses the latest mechanism of each process,
+        # so stability is checked on the edges into the latest nodes.
+        latest_time: Dict[str, int] = {}
+        for node in v:
+            latest_time[node.name] = max(latest_time.get(node.name, node.time), node.time)
+
+        latest_template: Dict[Tuple[str, str, int], float] = {}
+        for src, tgt in directed_edges:
+            if tgt.time == latest_time[tgt.name]:
+                latest_template[(src.name, tgt.name, tgt.time - src.time)] = coefficients[(src, tgt)]
+
+        rho = _template_spectral_radius(latest_template, sorted(latest_time))
+
+        if rho > _STATIONARITY_RHO_MAX:
+            # Scaling lag-k coefficients by alpha**k scales the radius by alpha
+            alpha = _STATIONARITY_RHO_MAX / rho
+            for src, tgt in directed_edges:
+                coefficients[(src, tgt)] *= alpha ** (tgt.time - src.time)
+
+    # ---------------------------------------------------------
     # Intercepts
     # ---------------------------------------------------------
     all_vars = list(u) + list(v)
@@ -1047,11 +1326,18 @@ def create_random_linear_dt_dynamic_scm_from_ftdag(ftdag: FtDirectedAcyclicGraph
                                       intercept_low: float = 0.0,
                                       intercept_high: float = 0.0,
                                       u_dist: Optional[Any] = None,
-                                      seed: Optional[int] = None):
+                                      seed: Optional[int] = None,
+                                      stationarity_stat: bool = True):
     ftadmg = ftdag
-    return create_random_linear_dt_dynamic_scm_from_ftadmg(ftadmg, weight_low,
-                                             weight_high, intercept_low, intercept_high,
-                                             u_dist, seed)
+    # Fix: keyword args (seed was previously passed as `causally_stationary`)
+    return create_random_linear_dt_dynamic_scm_from_ftadmg(ftadmg,
+                                             weight_low=weight_low,
+                                             weight_high=weight_high,
+                                             intercept_low=intercept_low,
+                                             intercept_high=intercept_high,
+                                             u_dist=u_dist,
+                                             seed=seed,
+                                             stationarity_stat=stationarity_stat)
 
 
 def create_random_linear_dt_dynamic_scm(
@@ -1067,6 +1353,7 @@ def create_random_linear_dt_dynamic_scm(
     intercept_high: float = 0.0,
     u_dist: Optional[Any] = None,
     seed: Optional[int] = None,
+    stationarity_stat: bool = True,
 ):
 
     ftadmg = create_random_ft_admg(
@@ -1088,6 +1375,7 @@ def create_random_linear_dt_dynamic_scm(
         u_dist=u_dist,
         causally_stationary=causally_stationary,
         seed=seed,
+        stationarity_stat=stationarity_stat,
     )
 
 def create_random_linear_dt_dynamic_scm_from_ftadmg_complex(ftadmg: FtAcyclicDirectedMixedGraph,
@@ -1242,7 +1530,8 @@ def create_random_linear_dt_dynamic_scm_complex(
     intercept_low: float = 0.0,
     intercept_high: float = 0.0,
     u_dist: Optional[Any] = None,
-    seed: Optional[int] = None
+    seed: Optional[int] = None,
+    stationarity_stat: bool = True,
 ) -> DtDynamicSCM:
     """
     Create a random linear DtDynamicSCM with specified parameters.
@@ -1267,10 +1556,13 @@ def create_random_linear_dt_dynamic_scm_complex(
         Whether to enforce causal stationarity in the generated SCM.
     seed : Optional[int]
         Random seed for reproducibility.
+    stationarity_stat : bool
+        Whether to enforce statistical stationarity (see
+        create_random_linear_dt_dynamic_scm_from_ftadmg).
     """
 
     ftadmg = create_random_ft_admg(num_ts=num_ts, p_edge=p_edge, causally_stationary=causally_stationary, max_delay=max_delay, allow_instantaneous=allow_instantaneous, allow_unmeasured_confounding=allow_unmeasured_confounding, seed=seed)
-    scm = create_random_linear_dt_dynamic_scm_from_ftadmg(ftadmg=ftadmg, weight_low=weight_low, weight_high=weight_high, intercept_low=intercept_low, intercept_high=intercept_high, u_dist=u_dist, causally_stationary=causally_stationary, seed=seed)
+    scm = create_random_linear_dt_dynamic_scm_from_ftadmg(ftadmg=ftadmg, weight_low=weight_low, weight_high=weight_high, intercept_low=intercept_low, intercept_high=intercept_high, u_dist=u_dist, causally_stationary=causally_stationary, seed=seed, stationarity_stat=stationarity_stat)
     return scm
 
 

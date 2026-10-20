@@ -1,151 +1,322 @@
-"""Direct implementation of the pseudo-codes FindSepset, OrientFromParent, OrientEdge.
 
-Conventions
------------
-- Nodes are DTimeVar(name, time) with time <= 0: X_t -> DTimeVar("X", 0),
-  Y_{t-l} -> DTimeVar("Y", -l).
-- `ci(X, Y, cond)` is any conditional independence test returning True when
-  X is independent of Y given `cond` (a list of DTimeVar).
-- Orientations are returned relative to the order of the arguments:
-  "->" means first node -> second node, "<-" the opposite.
-"""
-from itertools import combinations
 
-from pyciphod.utils.time_series.data_format import DTimeVar
-from pyciphod.utils.graphs.separation import d_separated
+class SCGIncompatibilityWarning(UserWarning):
+    """An expected separating set was not found: the SCG may be locally
+    inconsistent with the data. Execution continues (with another candidate,
+    or by leaving the edge undirected if no candidate remains)."""
 
+
+# Possible orientations returned by OrientInstantaneousEdge.orient()
 NOT_ADJACENT = "not adjacent"
-NOT_S_ORIENTABLE = "not s-orientable"
+NOT_S_ORIENTABLE = "non s-orientable"  # theoretical case (Theorem): SCG is symmetric
 
 
-class OracleCI:
-    """Oracle CI test: d-separation in the true FT-DAG.
-    Assumes time 0 (present) sits at time index `gamma_max` in `ft_dag`."""
+# --------------------------------------------------------------------------- #
+# s-orientability                                                             #
+# --------------------------------------------------------------------------- #
+class sOrientability:
+    def __init__(self, scg: SummaryCausalGraph, A: DTimeVar, B: DTimeVar):
+        if A == B:
+            raise ValueError("A and B must be different variables.")
+        self._scg, self._A, self._B = scg, A, B
 
-    def __init__(self, ft_dag, gamma_max):
-        self.ft_dag, self.gamma_max = ft_dag, gamma_max
+    def classify(self) -> Optional[int]:
+        """
+        0: no edge between A and B in the SCG.
+        1: exactly one directed edge (already oriented).
+        2: bidirectional edge, at least one node without self-loop.
+        3: bidirectional edge, both self-loops, different parent sets.
+        None: bidirectional edge, both self-loops, same parent sets
+              (not s-orientable).
+        """
+        a, b = self._A.get_name(), self._B.get_name()
+        edges = set(self._scg.get_directed_edges())
+        ab, ba = (a, b) in edges, (b, a) in edges
 
-    def _shift(self, v):
-        return DTimeVar(v.get_name(), self.gamma_max + v.get_time())
+        if not (ab or ba):
+            return 0
+        if ab != ba:
+            return 1
+        if (a, a) not in edges or (b, b) not in edges:
+            return 2
+        if set(self._scg.get_parents(a)) != set(self._scg.get_parents(b)):
+            return 3
+        return None
 
-    def __call__(self, X, Y, cond):
-        return d_separated(
-            self.ft_dag, [self._shift(X)], [self._shift(Y)], [self._shift(z) for z in cond]
-        )
+    def is_s_orientable(self) -> bool:
+        return self.classify() is not None
 
 
-class SCGOrienter:
-    def __init__(self, scg, ci):
-        self.scg = scg
-        self.ci = ci
-        self.gamma_max = scg.get_lag_max()
+# --------------------------------------------------------------------------- #
+# FindSepset (Algorithm FindSepset of the paper)                              #
+# --------------------------------------------------------------------------- #
+class SepsetFinder:
+    """Holds the data / SCG / CI test, the sepset cache and the CI counter.
 
-    # ----------------------------------------------------------------------- #
-    # Algorithm FindSepset                                                    #
-    # ----------------------------------------------------------------------- #
-    def find_sepset(self, X, Y):
-        """Separating set of X_t and Y_{t-l} (X at time 0, 0 <= l <= gamma_max).
-        Returns a list of nodes, or None if X and Y are adjacent."""
-        scg = self.scg
-        x, y, lag = X.get_name(), Y.get_name(), -Y.get_time()
+    One instance can be shared by every orienter working on the same
+    data/SCG pair: tests are never repeated and counted only once.
+    """
 
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        scg: SummaryCausalGraph,
+        alpha: float,
+        ci_test: CiTests = FisherZ,
+        oracle: bool = False,
+        true_ftdag=None,
+        cache: Optional[Dict] = None,
+    ):
+        if oracle and true_ftdag is None:
+            raise ValueError("true_ftdag is required when oracle=True.")
+        self._data, self._scg = data, scg
+        self._gamma_max = scg.get_lag_max()
+        self._ci_test, self._alpha = ci_test, alpha
+        self._oracle, self._ftdag = oracle, true_ftdag
+        self._edges = frozenset(scg.get_directed_edges())
+        self._cache: Dict = {} if cache is None else cache
+        self.nb_ci_tests = 0
+
+    # ---- primitives ------------------------------------------------------- #
+    def independent(self, X: DTimeVar, Y: DTimeVar, cond: List[DTimeVar]) -> bool:
+        """One (oracle or statistical) independence test, counted."""
+        self.nb_ci_tests += 1
+        if self._oracle:
+            g = self._gamma_max  # position of time 0 in the FT-DAG
+            to_ftdag = lambda v: DTimeVar(v.get_name(), g + v.get_time())
+            return d_separated(
+                self._ftdag, [to_ftdag(X)], [to_ftdag(Y)], [to_ftdag(z) for z in cond]
+            )
+        return self._ci_test(X, Y, cond).get_pvalue(self._data) > self._alpha
+
+    @staticmethod
+    def _key(X: DTimeVar, Y: DTimeVar):
+        kx, ky = (X.get_name(), X.get_time()), (Y.get_name(), Y.get_time())
+        # FindSepset is symmetric for instantaneous pairs.
+        return tuple(sorted((kx, ky))) if Y.get_time() == 0 else (kx, ky)
+
+    def find_sepset(self, X: DTimeVar, Y: DTimeVar) -> Optional[List[DTimeVar]]:
+        """Cached separating set of X_t and Y_{t-l}, or None if adjacent."""
+        key = self._key(X, Y)
+        if key not in self._cache:
+            self._cache[key] = self._search_sepset(X, Y)
+        return self._cache[key]
+
+    def are_adjacent(self, X: DTimeVar, Y: DTimeVar) -> bool:
+        return self.find_sepset(X, Y) is None
+
+    def _search_sepset(self, X: DTimeVar, Y: DTimeVar) -> Optional[List[DTimeVar]]:
+        x, y, lag = X.get_name(), Y.get_name(), Y.get_time()
+        if X.get_time() != 0 or not -self._gamma_max <= lag <= 0:
+            raise ValueError("X must be at time 0 and Y's lag in [-gamma_max, 0].")
+
+        scg = self._scg
         if lag == 0:
-            # Q and R are computed in the SCG without the edges between x and y
-            scg_xy = scg.copy()
-            for edge in [(x, y), (y, x)]:
-                if edge in scg.get_directed_edges():
-                    scg_xy.remove_directed_edge(*edge)
-            series = [x, y]
-            lagged_series = set(scg.get_parents(x)) | set(scg.get_parents(y))
+            # Instantaneous case: compute Q and R in the SCG without x-y edges.
+            graph = scg.copy()
+            for e in ((x, y), (y, x)):
+                if e in self._edges:
+                    graph.remove_directed_edge(*e)
+            ends = (x, y)
+            d_parents = set(scg.get_parents(x)) | set(scg.get_parents(y))
             excluded = {x, y}
         else:
-            scg_xy = scg
-            series = [x]
-            lagged_series = set(scg.get_parents(x))
-            excluded = {x}
+            graph, ends, d_parents = scg, (x,), set(scg.get_parents(x))
+            excluded = {x}  # Y_t (same series as Y_{t-l}) stays a valid candidate
 
-        Q, R = set(), set()
-        for s in series:
-            parents = set(scg_xy.get_parents(s))
-            descendants = set(scg_xy.get_descendants(s)) | {s}  # s is its own descendant
-            Q |= parents - descendants               # instantaneous parents, non-descendants
-            R |= (parents & descendants) - excluded  # instantaneous parents, descendants
-        R -= Q
+        q, r = set(), set()
+        for n in ends:
+            parents = set(graph.get_parents(n))
+            desc = set(graph.get_descendants(n)) | {n}  # convention: n in desc(n)
+            q |= parents - desc
+            r |= parents & desc
+        q -= excluded
+        r -= excluded
+        r -= q  # Q and R are built from a union over X and Y: avoid duplicates
 
-        # L: lagged copies of the parents (all lags 1..gamma_max), except Y_{t-l} itself
-        L = [DTimeVar(v, -k)
-             for v in sorted(lagged_series)
-             for k in range(1, self.gamma_max + 1)
-             if not (v == y and k == lag)]
-        always = L + [DTimeVar(v, 0) for v in sorted(Q)]
+        # L_t, minus Y_{t-l} itself in the lagged case.
+        fixed = [DTimeVar(v, -k) for v in sorted(d_parents)
+                 for k in range(1, self._gamma_max + 1)
+                 if not (lag < 0 and v == y and -k == lag)]
+        fixed += [DTimeVar(v, 0) for v in sorted(q)]
+        candidates = [DTimeVar(v, 0) for v in sorted(r)]
 
-        # try every subset T of R, smallest first
-        for size in range(len(R) + 1):
-            for T in combinations(sorted(R), size):
-                cond = always + [DTimeVar(v, 0) for v in T]
-                if self.ci(X, Y, cond):
+        for size in range(len(candidates) + 1):
+            for Z in combinations(candidates, size):
+                cond = fixed + list(Z)
+                if self.independent(X, Y, cond):
                     return cond
-        return None  # no separating set: adjacent
+        return None
 
-    # ----------------------------------------------------------------------- #
-    # Algorithm OrientFromParent                                              #
-    # ----------------------------------------------------------------------- #
-    def orient_from_parent(self, U, V, c):
-        """U, V: nodes at time 0 with U <-> V in the SCG; c: a series with
-        c in parents(U) \\ parents(V). Returns "->" (U_t -> V_t) or "<-" (U_t <- V_t)."""
-        # D: a past copy of C adjacent to U_t (then C_{t-l} -> U_t and C_{t-l} not adjacent to V_t)
-        D = None
-        for lag in range(1, self.gamma_max + 1):
-            if self.find_sepset(U, DTimeVar(c, -lag)) is None:
-                D = DTimeVar(c, -lag)
-                break
 
-        # otherwise C_t -> U_t
-        if D is None:
-            if c == V.get_name():
-                return "<-"
-            D = DTimeVar(c, 0)
+# --------------------------------------------------------------------------- #
+# Edge orientation (Algorithms OrientEdge / OrientFromParent)                 #
+# --------------------------------------------------------------------------- #
+class OrientInstantaneousEdge:
+    def __init__(
+        self,
+        data: Optional[pd.DataFrame],
+        A: DTimeVar,
+        B: DTimeVar,
+        scg: SummaryCausalGraph,
+        alpha: float = 0.05,
+        ci_test: CiTests = FisherZ,
+        oracle: bool = False,
+        true_ftdag=None,
+        cache: Optional[Dict] = None,
+        finder: Optional[SepsetFinder] = None,
+    ):
+        """`finder` (optional) lets several orienters share cache and CI counter.
+        Otherwise a private SepsetFinder is built (`cache` can still be shared)."""
+        self._A, self._B, self._scg = A, B, scg
+        self._gamma_max = scg.get_lag_max()
+        self._edges = set(scg.get_directed_edges())
+        self._finder = finder or SepsetFinder(
+            data, scg, alpha, ci_test, oracle, true_ftdag, cache
+        )
 
-        Z = self.find_sepset(V, D)
-        if Z is not None and U in Z:
-            return "->"  # U_t is a non-collider on D - U_t - V_t
-        return "<-"      # collider (or D adjacent to V_t: V_t -> D -> U_t)
+    @property
+    def nb_ci_tests(self) -> int:
+        return self._finder.nb_ci_tests
 
-    # ----------------------------------------------------------------------- #
-    # Algorithm OrientEdge                                                    #
-    # ----------------------------------------------------------------------- #
-    def orient_edge(self, A, B):
-        """A_{t'} and B_t, with B at time 0 and A at time <= 0.
-        Returns NOT_ADJACENT, "->" (A -> B), "<-" (A <- B) or NOT_S_ORIENTABLE."""
-        scg = self.scg
+    @property
+    def undirected(self) -> str:
+        """Label returned when the edge is left undirected (fallback)."""
+        return f"{self._A.get_name()}t - {self._B.get_name()}t"
+
+    # thin wrappers kept for backward compatibility
+    def _find_sepset(self, X, Y):
+        return self._finder.find_sepset(X, Y)
+
+    def _are_adjacent(self, X, Y):
+        return self._finder.are_adjacent(X, Y)
+
+    def _warn_undirected(self, context: str) -> None:
+        warnings.warn(
+            f"SCG too incompatible with data to orient edge "
+            f"{self._A.get_name()}-{self._B.get_name()} ({context}): "
+            f"the edge is left undirected.",
+            SCGIncompatibilityWarning,
+        )
+
+    # ---- orientation helpers ---------------------------------------------- #
+    def _probe_lags(self, probe: DTimeVar, far_name: str, target: DTimeVar,
+                    context: str) -> Tuple[bool, Optional[bool]]:
+        """Scan lags l = 1..gamma_max for `probe` adjacent to far_name_{t-l}.
+        At the first such lag with a valid sepset between `target` and
+        far_name_{t-l}, return (True, probe in sepset), i.e. whether `probe`
+        is a parent of `target`. Returns (adjacency_found, None) otherwise."""
+        found = False
+        for l in range(1, self._gamma_max + 1):
+            far = DTimeVar(far_name, -l)
+            if not self._are_adjacent(probe, far):
+                continue
+            found = True
+            sepset = self._find_sepset(target, far)
+            if sepset is not None:
+                return True, probe in sepset
+            warnings.warn(
+                f"SCG incompatible with data: no separating set between "
+                f"{target.get_name()}t and {far_name}t-{l} ({context}). "
+                f"Trying another lag.",
+                SCGIncompatibilityWarning,
+            )
+        return found, None
+
+    def _resolve_via_lag(self, probe_name: str, far_name: str,
+                         context: str) -> Tuple[bool, Optional[bool]]:
+        """Case 2. `far_name` is the node without self-loop (also the target).
+        Returns (found, is_parent):
+          - (False, None): no adjacent lag -> instantaneous far -> probe is forced;
+          - (True, bool): decided (probe is / is not a parent of the target);
+          - (True, None): adjacent lag(s) but no valid sepset -> undecided."""
+        return self._probe_lags(
+            DTimeVar(probe_name, 0), far_name, DTimeVar(far_name, 0), context
+        )
+
+    def _resolve_via_z(self, probe_name: str, z_name: str, target_name: str,
+                       context: str) -> Optional[bool]:
+        """Case 3, for one candidate z. Lagged copies of z first, then Z_t.
+        Returns True/False (probe is/is not a parent of target), or None if
+        this candidate is inconclusive (an adjacent lag without sepset)."""
+        probe, target = DTimeVar(probe_name, 0), DTimeVar(target_name, 0)
+        found, is_parent = self._probe_lags(probe, z_name, target, context)
+        if is_parent is not None:
+            return is_parent
+        if found:
+            # Fact 4 of the paper requires that NO lagged copy is adjacent.
+            return None
+        sepset = self._find_sepset(target, DTimeVar(z_name, 0))
+        if sepset is None:  # target adjacent to Z_t: only target -> probe is consistent
+            return False
+        return probe in sepset
+
+    def _orient_lagged(self) -> Tuple[str, int]:
+        """Steps 1-2 of OrientEdge: A_{t'} and B_t with t' != t."""
+        A, B = self._A, self._B
         a, b = A.get_name(), B.get_name()
-        lag = -A.get_time()
+        a_first = A.get_time() < B.get_time()
+        early, late = (A, B) if a_first else (B, A)
+        lag = early.get_time() - late.get_time()  # < 0
+        if -lag > self._gamma_max:
+            return NOT_ADJACENT, -1
+        if not self._are_adjacent(DTimeVar(late.get_name(), 0),
+                                  DTimeVar(early.get_name(), lag)):
+            return NOT_ADJACENT, -1
+        return (f"{a}t -> {b}t" if a_first else f"{a}t <- {b}t"), -1
 
-        # Step 1: adjacency
-        if lag > self.gamma_max:
-            return NOT_ADJACENT
-        if self.find_sepset(B, A) is not None:
-            return NOT_ADJACENT
+    # ---- main entry point ------------------------------------------------- #
+    def orient(self) -> Tuple[str, Optional[int]]:
+        """Returns (orientation, case). Orientation is one of:
+          'not adjacent', 'At -> Bt', 'At <- Bt',
+          'At - Bt'          (undirected: no candidate gave a valid sepset,
+                              a SCGIncompatibilityWarning is emitted),
+          'non s-orientable' (theoretical case: SCG symmetric in A and B).
+        Case is -1 for lagged pairs."""
+        a, b = self._A.get_name(), self._B.get_name()
+        ta, tb = self._A.get_time(), self._B.get_time()
+        if ta != tb:
+            return self._orient_lagged()
+        if ta != 0:
+            raise ValueError("Instantaneous pairs must be given at time 0.")
 
-        # Step 2: lagged edge, oriented by time
-        if lag > 0:
-            return "->"
+        case = sOrientability(self._scg, self._A, self._B).classify()
 
-        # Step 3: instantaneous edge, only one direction in the SCG
-        if b not in scg.get_parents(a):
-            return "->"
-        if a not in scg.get_parents(b):
-            return "<-"
+        if case == 0 or not self._are_adjacent(self._A, self._B):
+            return NOT_ADJACENT, case
 
-        # Step 4: A <-> B in the SCG, look for a parent of one that is not a parent of the other
-        only_a = sorted(set(scg.get_parents(a)) - set(scg.get_parents(b)))
-        only_b = sorted(set(scg.get_parents(b)) - set(scg.get_parents(a)))
-        if only_a:
-            return self.orient_from_parent(A, B, only_a[0])
-        if only_b:
-            result = self.orient_from_parent(B, A, only_b[0])  # orientation of B vs A
-            return "<-" if result == "->" else "->"
-        return NOT_S_ORIENTABLE
+        def arrow(parent: str) -> str:
+            return f"{a}t -> {b}t" if parent == a else f"{a}t <- {b}t"
+
+        edges = self._edges
+
+        if case == 1:
+            return arrow(a if (a, b) in edges else b), case
+
+        if case == 2:
+            # v: node without self-loop (target), u: the other one (probe).
+            u, v = (a, b) if (b, b) not in edges else (b, a)
+            context = f"self-loop test on {v}"
+            found, is_parent = self._resolve_via_lag(u, v, context)
+            if found and is_parent is None:
+                self._warn_undirected(f"exhausted all lags, {context}")
+                return self.undirected, case
+            # No adjacent lag: well-specification forces the instantaneous v -> u.
+            return arrow(u if is_parent else v), case
+
+        if case == 3:
+            pa, pb = set(self._scg.get_parents(a)), set(self._scg.get_parents(b))
+            for probe, target, diff in ((a, b, pa - pb), (b, a, pb - pa)):
+                for z in sorted(diff):
+                    is_parent = self._resolve_via_z(
+                        probe, z, target, f"parents({probe}) \\ parents({target})"
+                    )
+                    if is_parent is not None:
+                        return arrow(probe if is_parent else target), case
+            self._warn_undirected("exhausted all candidate conditioning variables in case 3")
+            return self.undirected, case
+
+        return NOT_S_ORIENTABLE, case
     
     
 # --------------------------------------------------------------------------- #

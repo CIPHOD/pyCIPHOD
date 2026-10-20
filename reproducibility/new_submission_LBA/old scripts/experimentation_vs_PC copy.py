@@ -360,12 +360,12 @@ def summarize_sweep(df, param_name, base_params):
 # ----------------------------------------------------------------------------
 
 def main_sweep(n_rep_per_case=3, use_tpc=True):
-    base_params = dict(p=10, p_edge=0.4, gamma_max=2, alpha=0.05, n_timepoints=5000, seed=123)
+    base_params = dict(p=3, p_edge=0.4, gamma_max=1, alpha=0.05, n_timepoints=5000, seed=123)
     sweeps = {
-        "p_edge": [0.2, 0.4, 0.6, 0.8],
-        "p": [5, 10, 15, 20],
-        "n_timepoints": [500, 1000, 5000, 10000, 20000],
-        "gamma_max": [1, 2, 3, 4],
+        "p_edge": [0.4],
+        "p": [5],
+        "n_timepoints": [5000],
+        "gamma_max": [1],
     }
     summaries = {}  # sweep name -> summary DataFrame (kept to rebuild the combined file)
 

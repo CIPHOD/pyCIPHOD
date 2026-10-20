@@ -1,0 +1,3 @@
+query,n,n_paired,win_rate_all_pct,tie_all_pct,win_rate_paired_pct,wilcoxon_p_less,tests_ratio_median,time_ratio_median
+ATE,100,100,72.0,3.0,72.0,5.8085757428298167e-08,0.03250402106655083,0.05362594273587781
+CDE,100,100,78.0,3.0,79.0,2.0538765733094245e-11,0.0385802792238073,0.0661317198804931
