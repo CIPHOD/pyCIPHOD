@@ -1,300 +1,429 @@
-# %% Effet causal estimé : s-identifiabilité (notre méthode) vs TPC vs ensemble d'ajustement du DAG
-#
-# Pour chaque requête (ATE ou CDE) on compare trois estimateurs OLS qui ne diffèrent que par
-# l'ensemble d'ajustement :  (i) DAG (référence)  (ii) sIdentifiability  (iii) TPC.
-# Erreur d'un estimateur = (estimation - estimation basée sur le DAG)^2.
-# Le rôle des "cas" de l'expérience d'orientation est joué ici par le type de requête (ATE / CDE).
+# %% Sweeps for OrientEdge-based adjustment sets (ConstructAdjSet) vs TPC (SCG BK) vs oracle FT-DAG
+# 100 effects per query (ATE, CDE) and per parameter value -> raw + summary CSVs (no figures).
+# Same parameters, sweeps and export layout as the s-orientability sweeps script.
+import os
+# Avoid BLAS oversubscription under joblib (otherwise timings are meaningless)
+for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_v, "1")
 
-import itertools
+import time
+
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 
-from pyciphod.utils.time_series.data_format import DTimeVar
-from pyciphod.causal_discovery.local.orientation_using_scg import sIdentifiability
-from pyciphod.causal_discovery.basic.ts_constraint_based import TsPC
-from pyciphod.utils.stat_tests.independence_tests import FisherZTest
+from pyciphod.utils.scms.dynamic_scm import create_random_linear_dt_dynamic_scm
+from pyciphod.utils.time_series.data_format import DTimeVar, wide_timevar_to_lagged_df
+# NOTE: adjust this import path to wherever sIdentifiability / ConstructAdjSet live
+from pyciphod.causal_discovery.local.s_identifiability import sIdentifiability, ConstructAdjSet
+# NOTE: adjust this import path to wherever run_tpc_bkscg lives
+from pyciphod.causal_discovery.basic.tspc_scg import run_tpc_bkscg
 
-# Utilitaires partagés avec l'expérience de s-orientabilité (même dossier)
-from reproducibility.new_submission_LBA.experimentation_vs_PC_old import (
-    DEFAULT_PARAMS, _simulate, bk_from_scg, maybe_to_csv, value_stats,
-    _num, _ms, _print_table, plot_sweep_comparison,
-)
-
+# ----------------------------------------------------------------------------
+# Configuration
+# ----------------------------------------------------------------------------
+OUTPUT_DIR = "outputs"          # files are prefixed "adjset_" so they never clash with the orientability ones
+N_REP_PER_QUERY = 500           # effects DRAWN per query and per parameter value (skipped tasks are not replaced)
+N_JOBS = -1                     # 1 = sequential, -1 = all cores
 BURN_IN = 200
-ORACLE = False          # True : d-séparation exacte ; False : tests CI sur les données
-CI = FisherZTest
+ORACLE = False
+USE_TPC = True
 QUERIES = ("ATE", "CDE")
+MAX_EFFECT_LAG = None
+MIN_ABS_EFFECT = 0.1
+MAX_SPECTRAL_RADIUS = 0.95      # reject (nearly) explosive SCMs: OLS/CI tests are meaningless there
+DEFAULT_PARAMS = dict(p=10, p_edge=0.4, gamma_max=2, alpha=0.05, n_timepoints=5000, seed=17102026)
+SWEEPS = {
+    "p_edge":       [0.2, 0.4, 0.6],
+    "p":            [5, 10, 15],
+    "n_timepoints": [1000, 5000, 10000],
+    "gamma_max":    [1, 2, 3],
+    "alpha":        [0.01, 0.05, 0.1],
+}
+PARAM_KEYS = list(DEFAULT_PARAMS)
+METHODS = [("ours", "our"), ("tpc", "tpc"), ("ftdag", "ftdag")]  # (method name in CSV, column prefix in raw df)
+
+
+class TpcUndirectedNeighbor(Exception):
+    """TPC left an undirected edge incident to the target."""
+    def __init__(self, msg, edges=()):
+        super().__init__(msg)
+        self.edges = list(edges)
+
+
+class SkipTask(Exception):
+    """Task excluded for ALL methods (keeps the comparison paired)."""
+    def __init__(self, reason, detail=""):
+        super().__init__(reason)
+        self.reason, self.detail = reason, detail
 
 
 # ----------------------------------------------------------------------------
-# Utilitaires
+# Simulation helpers
 # ----------------------------------------------------------------------------
-
-def shift(nodes, dt):
-    return {DTimeVar(n.get_name(), n.get_time() + dt) for n in nodes}
-
-
-def parents_dag(ft_dag, gmax, name):
-    """Parents réels de name_t (dans le FT-DAG, le temps courant est gmax)."""
-    node = DTimeVar(name, gmax)
-    return {DTimeVar(u.get_name(), u.get_time() - gmax)
-            for u, w in ft_dag.get_directed_edges() if w == node}
-
-
-def parents_tpc(g_hat, name):
-    """Parents orientés de name_t dans le graphe estimé (temps courant = 0)."""
-    node = DTimeVar(name, 0)
-    return {u for u, w in g_hat.get_directed_edges() if w == node}
-
-
-def ols_effect(data, outcome, treatment, controls):
-    cols = [treatment] + sorted(controls, key=lambda c: (c.get_name(), c.get_time()))
-    X = np.column_stack([data[c].to_numpy(dtype=float) for c in cols] + [np.ones(len(data))])
-    y = data[outcome].to_numpy(dtype=float)
-    # Séries explosives / NaN : on retire les lignes non finies (LAPACK plante sinon)
-    keep = np.isfinite(X).all(axis=1) & np.isfinite(y)
-    if keep.sum() <= X.shape[1] or keep.mean() < 0.9:   # trop peu de données exploitables
-        return np.nan
-    try:
-        return np.linalg.lstsq(X[keep], y[keep], rcond=None)[0][0]
-    except np.linalg.LinAlgError:
-        return np.nan
-
-
-def draw_query(rng, ft_dag, scg, gmax, kind):
-    """Tire une requête (T, y) de type `kind`, ou None si le SCG n'en contient pas."""
-    nodes = list(scg.get_vertices())
-    if kind == "ATE":       # Y descendant de X, T = X_{t-γ}
-        cands = [(x, y) for x, y in itertools.permutations(nodes, 2) if y in scg.get_descendants(x)]
-        if not cands:
-            return None
-        x, y = cands[rng.integers(len(cands))]
-        return DTimeVar(x, -int(rng.integers(gmax + 1))), y
-    # CDE : arête X_{t-γ} -> Y_t du FT-DAG avec X != Y
-    cands = [(T, y) for y in nodes for T in parents_dag(ft_dag, gmax, y) if T.get_name() != y]
-    return cands[rng.integers(len(cands))] if cands else None
-
-
-def run_tpc(data, scg, ft_dag, gmax, params):
-    """Une seule découverte TPC par DAG, sur la fenêtre [-gmax, 0]."""
-    try:
-        tpc = TsPC(params["alpha"], ci_test=CI, oracle=ORACLE, true_ftdag=ft_dag,
-                   background_knowledge=bk_from_scg(scg, gmax))
-        tpc.run(data[[c for c in data.columns if -c.time <= gmax]])
-        return dict(g_hat=tpc.g_hat, nb_tests=tpc.nb_ci_tests, error=False)
-    except Exception:
-        return dict(g_hat=None, nb_tests=np.nan, error=True)
-
-
-# ----------------------------------------------------------------------------
-# Évaluation d'une requête
-# ----------------------------------------------------------------------------
-
-def evaluate_query(kind, T, y, ft_dag, scg, gmax, data, tpc, params, extra):
-    Y = DTimeVar(y, 0)
-    # ATE : Pa(X_{t-γ}) ; CDE : Pa(Y_t)
-    name, dt = (T.get_name(), T.get_time()) if kind == "ATE" else (y, 0)
-
-    adj_dag = shift(parents_dag(ft_dag, gmax, name), dt)
-    adj_tpc = None if tpc["error"] else shift(parents_tpc(tpc["g_hat"], name), dt)
-    try:
-        sid = sIdentifiability(data, T, Y, kind, scg, params["alpha"], CI, ORACLE, ft_dag)
-        adj_sid, tests_sid, sid_error = sid.get_adj_set(), sid.nb_ci_tests, False
-    except Exception:
-        adj_sid, tests_sid, sid_error = None, np.nan, True
-
-    est = dict(dag=np.nan, sid=np.nan, tpc=np.nan)
-    sets = dict(dag=adj_dag, sid=adj_sid, tpc=adj_tpc)
-    if all(s is not None for s in sets.values()):
-        sets = {k: s - {T, Y} for k, s in sets.items()}
-        if all(c in data.columns for s in sets.values() for c in s):
-            est = {k: ols_effect(data, Y, T, s) for k, s in sets.items()}
-
-    return dict(
-        **extra, query=kind, T=str(T), Y=str(Y),
-        identified=adj_sid is not None and not sid_error,
-        sid_error=sid_error, tpc_error=tpc["error"],
-        est_dag=est["dag"], est_sid=est["sid"], est_tpc=est["tpc"],
-        comparable=not np.isnan(est["dag"] + est["sid"] + est["tpc"]),
-        se_sid=(est["sid"] - est["dag"]) ** 2, se_tpc=(est["tpc"] - est["dag"]) ** 2,
-        tests_sid=tests_sid, tests_tpc=tpc["nb_tests"],
+def simulate(params, seed):
+    """Random SCM -> (scm, ft_dag, scg), deterministic given `seed`."""
+    np.random.seed(seed)  # u_dist uses the global RNG
+    scm = create_random_linear_dt_dynamic_scm(
+        num_ts=params["p"], p_edge=params["p_edge"], causally_stationary=True,
+        max_delay=params["gamma_max"], allow_instantaneous=True,
+        allow_unmeasured_confounding=False, intercept_low=0, intercept_high=0,
+        u_dist=lambda: np.random.normal(0, 1), seed=seed,
     )
+    ft_dag = scm[0].induced_ft_dag()
+    return scm, ft_dag, ft_dag.get_summary_causal_graph()
 
 
-def run_dag(seed, kinds, params, rng):
-    """Un DAG, un run TPC, une requête par type de `kinds` (si elle existe) -> liste de lignes."""
+def generate_data(scm, params, seed, window):
     np.random.seed(seed)
-    scm, ft_dag, scg = _simulate(params, seed)
-    gmax = scg.get_lag_max()
-
-    queries = [(k, *q) for k in kinds if (q := draw_query(rng, ft_dag, scg, gmax, k))]
-    if not queries:
-        return []
-
-    full = scm.generate_causally_stationary_time_series_from_latest_mechanisms(
-        n_timepoints=params["n_timepoints"], burn_in=BURN_IN, include_latent=False,
-        time_series_format="ts_lagged", seed=seed,
+    wide = scm[0].generate_causally_stationary_data_from_latest_mechanisms(
+        n_timepoints=params["n_timepoints"], n_samples=1, burn_in=BURN_IN,
+        include_latent=False, seed=seed, reindex_time=True,
     )
-    # 2*gmax lags : l'ensemble d'ajustement de l'ATE remonte jusqu'à t-γ-gmax
-    data = full[[c for c in full.columns if -c.time <= 2 * gmax]].copy()
-    tpc = run_tpc(data, scg, ft_dag, gmax, params)
-    return [evaluate_query(k, T, y, ft_dag, scg, gmax, data, tpc, params, dict(seed=seed))
-            for k, T, y in queries]
+    lagged = wide_timevar_to_lagged_df(wide, window_size=window)
+    return lagged[[c for c in lagged.columns if 0 <= -c.time <= window - 1]].copy()
 
 
 # ----------------------------------------------------------------------------
-# Expériences : "globale" (une requête de chaque type par DAG) et équilibrée par type
+# Ground truth
 # ----------------------------------------------------------------------------
+def coefficient_template(scm):
+    model, coefs, _ = scm
+    observed = set(model.v)
+    latest = {}
+    for n in observed:
+        latest[n.name] = max(latest.get(n.name, n.time), n.time)
+    return {(s.name, t.name, t.time - s.time): w
+            for (s, t), w in coefs.items()
+            if s in observed and t in observed and t.time == latest[t.name]}
 
-def run_experiment(n_sim, params=None, first_seed=2020, verbose=True):
-    params = {**DEFAULT_PARAMS, **(params or {})}
-    rows = []
-    for seed in range(first_seed, first_seed + n_sim):
-        rows += run_dag(seed, QUERIES, params, np.random.default_rng(seed))
-        if verbose:
-            print(f"sim {seed} done")
-    return pd.DataFrame(rows)
+
+def _coef_matrices(template, names):
+    n = len(names)
+    idx = {name: i for i, name in enumerate(names)}
+    p = max((lag for (_, _, lag) in template), default=0)
+    B = [np.zeros((n, n)) for _ in range(p + 1)]  # B[k][tgt, src]
+    for (s, t, lag), w in template.items():
+        B[lag][idx[t], idx[s]] = w
+    return B, idx, p
 
 
-def run_balanced_experiment(n_rep_per_query, params=None, queries=QUERIES,
-                            max_attempts_per_query=None, verbose=True):
-    """Pour chaque type de requête : tire des DAGs jusqu'à obtenir `n_rep_per_query` requêtes."""
-    params = {**DEFAULT_PARAMS, **(params or {})}
+def impulse_responses(template, names, h_max):
+    """Psi[h][y, x] = effect of X_t on Y_{t+h} (sum over directed paths of coefficient products)."""
+    n = len(names)
+    B, idx, p = _coef_matrices(template, names)
+    inv = np.linalg.inv(np.eye(n) - B[0])
+    psi = [inv]
+    for h in range(1, h_max + 1):
+        acc = sum((B[k] @ psi[h - k] for k in range(1, min(h, p) + 1)), np.zeros((n, n)))
+        psi.append(inv @ acc)
+    return psi, idx
+
+
+def spectral_radius(template, names):
+    """Spectral radius of the companion matrix of the reduced-form VAR (<1 <=> stationary)."""
+    n = len(names)
+    B, _, p = _coef_matrices(template, names)
+    if p == 0:
+        return 0.0
+    inv = np.linalg.inv(np.eye(n) - B[0])
+    C = np.zeros((n * p, n * p))
+    for k in range(1, p + 1):
+        C[:n, (k - 1) * n:k * n] = inv @ B[k]
+    if p > 1:
+        C[n:, :-n] = np.eye(n * (p - 1))
+    return float(np.max(np.abs(np.linalg.eigvals(C))))
+
+
+def candidate_effects(scm, scg):
+    """Only effects whose TARGET series (treatment for ATE, outcome for CDE) has N(S_T, SCG) = {}."""
+    gamma = scg.get_lag_max()
+    cap = gamma if MAX_EFFECT_LAG is None else min(MAX_EFFECT_LAG, gamma)
+    sid = sIdentifiability(scg)
+    ok = {n: not sid._non_s_orientable_with(n) for n in scg.get_vertices()}
+
+    template = coefficient_template(scm)
+    names = sorted({n.name for n in scm[0].v})
+    out = {"ATE": [], "CDE": []}
+    if spectral_radius(template, names) >= MAX_SPECTRAL_RADIUS:
+        return out  # unstable SCM: discarded
+    psi, idx = impulse_responses(template, names, cap)
+
+    for (s, t, lag), w in template.items():
+        if lag <= cap and ok.get(t, False) and abs(w) >= MIN_ABS_EFFECT:
+            out["CDE"].append((s, t, lag, float(w)))
+    for nx in names:
+        if not ok.get(nx, False):
+            continue
+        for ny in names:
+            for h in range(cap + 1):
+                if nx == ny and h == 0:
+                    continue
+                val = float(psi[h][idx[ny], idx[nx]])
+                if abs(val) >= MIN_ABS_EFFECT:
+                    out["ATE"].append((nx, ny, h, val))
+    return out
+
+
+# ----------------------------------------------------------------------------
+# Estimation
+# ----------------------------------------------------------------------------
+def estimate_effect(data, X, Y, adj):
+    cols = [X] + sorted(set(adj) - {X, Y})
+    missing = [c for c in cols + [Y] if c not in data.columns]
+    if missing:
+        raise KeyError(f"columns missing from data (window too small?): {missing}")
+    sub = data[cols + [Y]].dropna()
+    A = np.column_stack([np.ones(len(sub)), sub[cols].to_numpy(float)])
+    coef = np.linalg.lstsq(A, sub[Y].to_numpy(float), rcond=None)[0]
+    return float(coef[1]), len(cols) - 1
+
+
+# ----------------------------------------------------------------------------
+# TPC
+# ----------------------------------------------------------------------------
+def tpc_target_parents(tpc, nT):
+    T0 = DTimeVar(nT, 0)
+    bad = [e for e in tpc["undirected"] if T0 in e]
+    if bad:
+        raise TpcUndirectedNeighbor(f"undirected edge(s) incident to {T0}", bad)
+    return {A for (A, B) in tpc["directed"] if B == T0}
+
+
+def diagnose_undirected(edges, nT, scg):
+    """For each undirected TPC edge at the target, say whether its other endpoint's series is
+    (wrongly) in N(S_T, SCG). If every one is 'ok', TPC is just weaker than the FT-MPDAG;
+    any 'NON_S_ORIENTABLE' means the task selection (s-orientability check) is inconsistent."""
+    nso = sIdentifiability(scg)._non_s_orientable_with(nT)
+    T0 = DTimeVar(nT, 0)
+    parts = []
+    for e in edges:
+        for o in [x for x in e if x != T0]:
+            tag = "NON_S_ORIENTABLE" if o.get_name() in nso else "ok"
+            parts.append(f"{o}[lag={-o.get_time()}]:{tag}")
+    return "; ".join(parts)
+
+
+# ----------------------------------------------------------------------------
+# Experiment
+# ----------------------------------------------------------------------------
+def draw_tasks(params):
+    """Phase 1 (sequential, cheap): draw SCMs until each query has N_REP_PER_QUERY effects."""
     rng = np.random.default_rng(params["seed"])
-    max_attempts = max_attempts_per_query or n_rep_per_query * 500
-
-    rows = []
-    for kind in queries:
-        collected = attempts = 0
-        if verbose:
-            print(f"\n=== Searching {kind} queries ===")
-        while collected < n_rep_per_query and attempts < max_attempts:
+    tasks = []
+    for query in QUERIES:
+        n_found = attempts = 0
+        while n_found < N_REP_PER_QUERY and attempts < 500 * N_REP_PER_QUERY:
             attempts += 1
-            found = run_dag(int(rng.integers(0, 2**31 - 1)), [kind], params, rng)
-            rows += found
-            collected += len(found)
-        if collected < n_rep_per_query:
-            print(f"  /!\\ {kind} : only {collected}/{n_rep_per_query} queries after {attempts} attempts.")
+            seed = int(rng.integers(0, 2**31 - 1))
+            scm, _, scg = simulate(params, seed)
+            cands = candidate_effects(scm, scg)[query]
+            if cands:
+                nX, nY, lag, truth = cands[int(rng.integers(len(cands)))]
+                tasks.append(dict(seed=seed, query=query, nX=nX, nY=nY, lag=lag, truth=truth))
+                n_found += 1
+                if n_found % 20 == 0:
+                    print(f"    {query}: {n_found}/{N_REP_PER_QUERY} effects drawn "
+                          f"({attempts} SCMs)", flush=True)
+        if n_found < N_REP_PER_QUERY:
+            print(f"    /!\\ {query}: only {n_found}/{N_REP_PER_QUERY} effects found")
+    return tasks
+
+
+def _metrics(beta, truth):
+    if beta is None or not np.isfinite(beta):
+        return dict(beta=np.nan, abs_err=np.nan, rel_err=np.nan)
+    return dict(beta=beta, abs_err=abs(beta - truth), rel_err=abs(beta - truth) / abs(truth))
+
+
+def _fill(row, pre, status, beta, truth, adj_size, nb_tests, secs):
+    row.update({f"{pre}_status": status, f"{pre}_adj_size": adj_size,
+                f"{pre}_nb_tests": nb_tests, f"{pre}_time": secs,
+                **{f"{pre}_{k}": v for k, v in _metrics(beta, truth).items()}})
+
+
+def _evaluate(task, params):
+    scm, ft_dag, scg = simulate(params, task["seed"])
+    gamma = scg.get_lag_max()
+    query, nX, nY, lag, truth = (task[k] for k in ("query", "nX", "nY", "lag", "truth"))
+    is_te = query == "ATE"
+    X, Y = DTimeVar(nX, -lag), DTimeVar(nY, 0)
+    nT, u = (nX, -lag) if is_te else (nY, 0)
+
+    data = generate_data(scm, params, task["seed"], window=lag + gamma + 1)
+    row = dict(seed=task["seed"], query=query, nX=nX, nY=nY, lag=lag, truth=truth,
+               target=nT, error=None, skip_reason=None, skip_detail=None)
+
+    # Oracle FT-DAG: adjustment = true parents of the target, 0 CI tests
+    t_max = ft_dag.t_max
+    T_node = DTimeVar(nT, t_max)
+    fparents = {DTimeVar(a.get_name(), a.get_time() - t_max + u)
+                for a, b in ft_dag.get_directed_edges() if b == T_node}
+    row["ftdag_outcome_in_set"] = Y in fparents
+    beta, k = estimate_effect(data, X, Y, fparents)
+    _fill(row, "ftdag", "ok", beta, truth, k, 0, 0.0)
+
+    # Ours (timing covers the adjustment-set construction only)
+    t0 = time.perf_counter()
+    cas = ConstructAdjSet(data, scg, alpha=params["alpha"], oracle=ORACLE, true_ftdag=ft_dag)
+    res = cas.run(query, X, Y)
+    our_time = time.perf_counter() - t0
+    if res == ConstructAdjSet.NOT_S_ORIENTABLE:
+        # should never happen when N(S_T) = {}: flag it loudly, skip the task
+        raise SkipTask("ours_not_s_orientable")
+    if res == ConstructAdjSet.ZERO:
+        _fill(row, "our", "zero", 0.0, truth, 0, cas.nb_ci_tests, our_time)
+    else:
+        beta, k = estimate_effect(data, X, Y, res)
+        _fill(row, "our", "ok", beta, truth, k, cas.nb_ci_tests, our_time)
+
+    # TPC with the SCG BK + support step, run once on the whole dataset
+    # (a failure skips the whole task: nothing is added for any method)
+    if USE_TPC:
+        tpc = run_tpc_bkscg(data, scg, alpha=params["alpha"], oracle=ORACLE, true_ftdag=ft_dag)
+        try:
+            parents = tpc_target_parents(tpc, nT)
+        except TpcUndirectedNeighbor as e:
+            detail = diagnose_undirected(e.edges, nT, scg)
+            raise SkipTask("tpc_undirected_neighbor",
+                           f"{detail} | support_conflicts={tpc['support_conflicts']}")
+        adj = {DTimeVar(A.get_name(), A.get_time() + u) for A in parents}
+        row["tpc_outcome_in_set"] = Y in adj
+        row["tpc_n_support_orientations"] = tpc["n_support_orientations"]
+        beta, k = estimate_effect(data, X, Y, adj)
+        _fill(row, "tpc", "ok", beta, truth, k, tpc["nb_tests"], tpc["time"])
+    return row
+
+
+def evaluate(task, params):
+    """Phase 2: one effect -> one result row. Never let one failing task kill the whole run."""
+    base = dict(seed=task["seed"], query=task["query"], nX=task["nX"], nY=task["nY"],
+                lag=task["lag"], truth=task["truth"], error=None,
+                skip_reason=None, skip_detail=None)
+    try:
+        return _evaluate(task, params)
+    except SkipTask as s:
+        return {**base, "skip_reason": s.reason, "skip_detail": s.detail}
+    except Exception as e:  # noqa: BLE001
+        return {**base, "error": f"{type(e).__name__}: {e}"}
+
+
+def run_value(params):
+    """All tasks for one parameter setting -> DataFrame (one row per effect)."""
+    print("  phase 1: drawing effects", flush=True)
+    tasks = draw_tasks(params)
+    print(f"  phase 2: evaluating {len(tasks)} effects", flush=True)
+    rows = Parallel(n_jobs=N_JOBS, verbose=5)(delayed(evaluate)(t, params) for t in tasks)
     return pd.DataFrame(rows)
 
 
 # ----------------------------------------------------------------------------
-# Résumés et tableaux
+# Summary
 # ----------------------------------------------------------------------------
+def _clean(df):
+    """Tasks usable for the comparison: no crash, not skipped (same tasks for every method)."""
+    df = df.copy()
+    for c in ("error", "skip_reason"):
+        if c not in df:
+            df[c] = None
+    return df[df["error"].isna() & df["skip_reason"].isna()]
 
-def summarize_by_query(df):
-    """Une ligne par type de requête + une ligne 'ALL'."""
+
+def _boot_rrmse_ci(rel, n_boot=2000, seed=0):
+    sq = np.asarray(rel, float) ** 2
+    if len(sq) == 0:
+        return np.nan, np.nan
+    rng = np.random.default_rng(seed)
+    m = rng.choice(sq, size=(n_boot, len(sq)), replace=True).mean(axis=1)
+    return tuple(np.sqrt(np.percentile(m, [2.5, 97.5])))
+
+
+def summarize(df, name, base_params):
+    """
+    One row per (param value, query, method), on the tasks where every method produced an estimate.
+      rrmse (+ 95% bootstrap CI) : sqrt(mean((beta_hat - truth)^2 / truth^2)), the relative RMSE
+      rel_err_*                  : median and quartiles of |beta_hat - truth| / |truth|
+      nb_tests_*, time_*         : median, quartiles and mean of #CI tests and seconds
+      n_drawn / n_skipped_* / n_crashed : task accounting for the (param value, query) group
+    """
+    num = lambda s: pd.to_numeric(s, errors="coerce").dropna().astype(float)
     rows = []
-    for q, g in [*df.groupby("query"), ("ALL", df)]:
-        ok = g[g["comparable"]]
-        t_sid = value_stats(g["tests_sid"])
-        t_tpc = value_stats(g.groupby("seed")["tests_tpc"].first())  # TPC : un run par DAG
-        rows.append(dict(
-            query=q, n=len(g), n_sid_error=int(g["sid_error"].sum()), n_tpc_error=int(g["tpc_error"].sum()),
-            prop_identified=g["identified"].mean(), n_comparable=len(ok),
-            mse_sid=ok["se_sid"].mean(), mse_tpc=ok["se_tpc"].mean(),
-            med_se_sid=ok["se_sid"].median(), med_se_tpc=ok["se_tpc"].median(),
-            tests_sid_mean=t_sid["mean"], tests_sid_std=t_sid["std"],
-            tests_tpc_mean=t_tpc["mean"], tests_tpc_std=t_tpc["std"],
-        ))
+    for (val, query), g in df.groupby(["param_value", "query"]):
+        eff = {**DEFAULT_PARAMS, **base_params, name: val}
+        used = _clean(g)
+        skip = g["skip_reason"] if "skip_reason" in g else pd.Series(dtype=object)
+        err = g["error"] if "error" in g else pd.Series(dtype=object)
+        for method, pre in METHODS:
+            if f"{pre}_rel_err" not in used:
+                continue
+            rel = num(used[f"{pre}_rel_err"])
+            if rel.empty:  # e.g. TPC not run
+                continue
+            tests, secs = num(used[f"{pre}_nb_tests"]), num(used[f"{pre}_time"])
+            lo, hi = _boot_rrmse_ci(rel.to_numpy())
+            r25, rmed, r75 = np.percentile(rel, [25, 50, 75])
+            q25, med, q75 = np.percentile(tests, [25, 50, 75])
+            t25, tmed, t75 = np.percentile(secs, [25, 50, 75])
+            rows.append(dict(
+                sweep=name, param_value=val, query=query, method=method,
+                n=len(rel), n_drawn=len(g),
+                n_skipped_tpc_undirected=int((skip == "tpc_undirected_neighbor").sum()),
+                n_skipped_ours_not_s_orientable=int((skip == "ours_not_s_orientable").sum()),
+                n_crashed=int(err.notna().sum()),
+                rrmse=float(np.sqrt((rel ** 2).mean())), rrmse_lo=lo, rrmse_hi=hi,
+                rel_err_median=rmed, rel_err_q25=r25, rel_err_q75=r75,
+                adj_size_median=num(used[f"{pre}_adj_size"]).median(),
+                nb_tests_median=med, nb_tests_q25=q25, nb_tests_q75=q75, nb_tests_mean=tests.mean(),
+                time_median=tmed, time_q25=t25, time_q75=t75, time_mean=secs.mean(),
+                **{k_: eff[k_] for k_ in PARAM_KEYS}))
     return pd.DataFrame(rows)
 
 
-def print_query_table(df_by_query, title="Performance by query type"):
-    print(f"\n=== {title} ===")
-    rows = [[r["query"], str(int(r["n"])),
-             f"{_num(100 * r['prop_identified'], 1)}%",
-             f"{int(r['n_comparable'])}",
-             f"{_num(r['mse_sid'], 5)} / {_num(r['mse_tpc'], 5)}",
-             f"{_num(r['med_se_sid'], 5)} / {_num(r['med_se_tpc'], 5)}",
-             _ms(r["tests_sid_mean"], r["tests_sid_std"], 1),
-             _ms(r["tests_tpc_mean"], r["tests_tpc_std"], 1)]
-            for _, r in df_by_query.iterrows()]
-    _print_table(["Query", "N", "s-identified", "N comparable", "MSE (ours / TPC)",
-                  "Median SE (ours / TPC)", "CI tests (ours)", "CI tests per DAG (TPC)"], rows)
-    print("\n(SE = squared difference to the DAG-based estimate; comparable = all 3 estimates available."
-          " CI tests: mean [std].)")
+def print_summary(s):
+    """Compact terminal view: relative RMSE [CI], median relative error, median #tests and time (seconds) [q25-q75]."""
+    t = pd.DataFrame({
+        "param": s["param_value"], "query": s["query"], "method": s["method"],
+        "n/drawn": [f"{r.n}/{r.n_drawn}" for r in s.itertuples()],
+        "rRMSE [95% CI]": [f"{r.rrmse:.3f} [{r.rrmse_lo:.3f}, {r.rrmse_hi:.3f}]" for r in s.itertuples()],
+        "med rel.err": [f"{r.rel_err_median:.3f}" for r in s.itertuples()],
+        "CI tests med [q25-q75]": [f"{r.nb_tests_median:.0f} [{r.nb_tests_q25:.0f}-{r.nb_tests_q75:.0f}]"
+                                   for r in s.itertuples()],
+        "time s med [q25-q75]": [f"{r.time_median:.3f} [{r.time_q25:.3f}-{r.time_q75:.3f}]"
+                                 for r in s.itertuples()],
+    })
+    print("\n" + t.to_string(index=False) + "\n", flush=True)
 
 
 # ----------------------------------------------------------------------------
-# Sweep (un paramètre à la fois, équilibré par type de requête)
+# Main
 # ----------------------------------------------------------------------------
+def main():
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    base_params = dict(DEFAULT_PARAMS)
+    summaries = {}  # sweep name -> summary DataFrame (to rebuild the combined file)
+    for name, values in SWEEPS.items():
+        print(f"\n===== SWEEP {name} = {values} =====", flush=True)
+        dfs = []
+        for i, val in enumerate(values, 1):
+            print(f"[{name}={val}] ({i}/{len(values)})", flush=True)
+            t0 = time.time()
+            df = run_value({**base_params, name: val})
+            df["param_name"], df["param_value"] = name, val
+            dfs.append(df)
+            print(f"  done in {time.time() - t0:.0f}s", flush=True)
+            if df["error"].notna().any():
+                print(f"  /!\\ {int(df['error'].notna().sum())} task(s) crashed, "
+                      f"e.g. {df['error'].dropna().iloc[0]}", flush=True)
+            # checkpoint after each value so a crash never loses finished work
+            raw = pd.concat(dfs, ignore_index=True)
+            raw.to_csv(f"{OUTPUT_DIR}/adjset_sweep_{name}.csv", index=False, na_rep="nan")
+            summaries[name] = summarize(raw, name, base_params)
+            summaries[name].to_csv(f"{OUTPUT_DIR}/adjset_summary_{name}.csv", index=False, na_rep="nan")
+            pd.concat(summaries.values(), ignore_index=True).to_csv(
+                f"{OUTPUT_DIR}/adjset_summary_all_sweeps.csv", index=False, na_rep="nan")
+        print_summary(summaries[name])
 
-def run_sweep(param_name, values, base_params, n_rep_per_query=100):
-    dfs = []
-    for val in values:
-        print(f"[sweep {param_name}={val}]")
-        df = run_balanced_experiment(n_rep_per_query, {**base_params, param_name: val}, verbose=False)
-        df = df[~df["sid_error"]].copy()
-        df["param_name"], df["param_value"] = param_name, val
-        dfs.append(df)
-    return pd.concat(dfs, ignore_index=True)
-
-
-def plot_sweep(df, param_name, series, ylabel, title, mode, out_path):
-    """Réutilise plot_sweep_comparison : le type de requête tient lieu de 'target_case'."""
-    plot_sweep_comparison(df.assign(target_case=df["query"]), param_name, series,
-                          ylabel, title, mode=mode, out_path=out_path)
-
-
-# ----------------------------------------------------------------------------
-# Main (choisir avec EXPERIMENT)
-# ----------------------------------------------------------------------------
-
-def main_global():
-    params = dict(p=5, p_edge=0.4, gamma_max=1, alpha=0.05, n_timepoints=10000)
-    df = run_experiment(n_sim=100, params=params)
-    maybe_to_csv(df, "identifiability_detail_global.csv")
-    by_query = summarize_by_query(df)
-    maybe_to_csv(by_query, "identifiability_by_query_global.csv")
-    print_query_table(by_query, "Global experiment (one ATE and one CDE query per DAG)")
-
-
-def main_balanced():
-    params = dict(p=5, p_edge=0.4, gamma_max=1, alpha=0.05, n_timepoints=5000, seed=42)
-    df = run_balanced_experiment(n_rep_per_query=20, params=params)
-    maybe_to_csv(df, "identifiability_detail_balanced.csv")
-    by_query = summarize_by_query(df)
-    maybe_to_csv(by_query, "identifiability_by_query_balanced.csv")
-    print_query_table(by_query, "Balanced sampling (identical N per query type)")
-
-
-def main_sweep():
-    base_params = dict(p=5, p_edge=0.4, gamma_max=1, alpha=0.05, n_timepoints=5000, seed=123)
-    sweeps = {
-        "p_edge": [0.2, 0.4, 0.6, 0.8],
-        "p": [3, 5, 8, 10],
-        "n_timepoints": [500, 1000, 5000, 10000, 20000],
-        "gamma_max": [1, 2, 3, 4],
-    }
-    ours = dict(method_label="Our method", method_key="ours")
-    tpc = dict(method_label="TPC", method_key="tpc")
-
-    for name, values in sweeps.items():
-        df = run_sweep(name, values, base_params, n_rep_per_query=100)
-        maybe_to_csv(df, f"sweep_identifiability_{name}.csv")
-
-        # Proportion de requêtes s-identifiées (notre méthode)
-        plot_sweep(df, name, [dict(value_col="identified", **ours)],
-                   "Proportion s-identified (per query)", "s-identified proportion by query type",
-                   "binomial", f"sweep_identifiability_{name}_identified.png")
-
-        # Erreur d'estimation (vs DAG), notre méthode vs TPC, sur les cas comparables
-        plot_sweep(df, name, [dict(value_col="se_sid", **ours), dict(value_col="se_tpc", **tpc)],
-                   "Squared error vs DAG-based estimate", "Estimation error by query type — Our method vs TPC",
-                   "robust", f"sweep_identifiability_{name}_error.png")
-
-        # Nombre de tests CI, une figure par méthode
-        for m, col, cfg in (("ours", "tests_sid", ours), ("tpc", "tests_tpc", tpc)):
-            plot_sweep(df, name, [dict(value_col=col, **cfg)],
-                       f"Number of CI tests ({cfg['method_label']})",
-                       f"Number of CI tests by query type — {cfg['method_label']}",
-                       "robust", f"sweep_identifiability_{name}_nb_tests_{m}.png")
-
-
-EXPERIMENT = "sweep"  # "sweep" | "balanced" | "global"
 
 if __name__ == "__main__":
-    {"sweep": main_sweep, "balanced": main_balanced, "global": main_global}[EXPERIMENT]()
-
+    main()
 # %%

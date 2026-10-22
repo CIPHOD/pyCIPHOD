@@ -10,9 +10,8 @@ from joblib import Parallel, delayed
 from pyciphod.utils.scms.dynamic_scm import create_random_linear_dt_dynamic_scm
 from pyciphod.utils.time_series.data_format import DTimeVar
 from pyciphod.causal_discovery.local.s_orientability import OrientEdge, sOrientability
-from pyciphod.causal_discovery.basic.ts_constraint_based import TsPC
-from pyciphod.utils.graphs.background_knowledge import BackgroundKnowledge
-from pyciphod.utils.stat_tests.independence_tests import FisherZTest
+# NOTE: adjust this import path to wherever run_tpc_bkscg lives
+from pyciphod.causal_discovery.basic.tspc_scg import run_tpc_bkscg
 
 NON_ADJACENT = OrientEdge.NON_ADJACENT
 
@@ -20,7 +19,7 @@ NON_ADJACENT = OrientEdge.NON_ADJACENT
 # Configuration
 # ----------------------------------------------------------------------------
 OUTPUT_DIR = "outputs"
-N_REP_PER_CASE = 100
+N_REP_PER_CASE = 500
 N_JOBS = -1            # 1 = sequential, -1 = all cores
 BURN_IN = 200
 ORACLE = False
@@ -30,11 +29,11 @@ CASE_NAMES = {0: "0: non-adjacent", 1: "1: oriented in SCG",
               2: "2: no self-loop", 3: "3: different parents"}
 DEFAULT_PARAMS = dict(p=10, p_edge=0.4, gamma_max=2, alpha=0.05, n_timepoints=5000, seed=17102026)
 SWEEPS = {
-    "p_edge":       [0.2, 0.4, 0.6, 0.8],
-    "p":            [3, 5, 10, 15],
-    "n_timepoints": [500, 1000, 5000, 10000],
+    "p_edge":       [0.2, 0.4, 0.6],
+    "p":            [5, 10, 15],
+    "n_timepoints": [1000, 5000, 10000],
     "gamma_max":    [1, 2, 3],
-    "alpha":        [0.001, 0.01, 0.05, 0.1],
+    "alpha":        [0.01, 0.05, 0.1],
 }
 PARAM_KEYS = list(DEFAULT_PARAMS)
 METHODS = [("ours", "our"), ("tpc", "tpc")]  # (method name in CSV, column prefix in raw df)
@@ -87,40 +86,6 @@ def pairs_of_case(scg, case):
 # ----------------------------------------------------------------------------
 # TPC
 # ----------------------------------------------------------------------------
-def bk_from_scg(scg, gamma_max):
-    """Background knowledge derived from the SCG (forbidden edges + mandatory orientations)."""
-    bk = BackgroundKnowledge()
-    nodes = list(scg.get_vertices())
-    all_kl = list(itertools.product(range(gamma_max + 1), repeat=2))
-    for x, y in itertools.combinations(nodes, 2):
-        if y not in set(scg.get_adjacencies(x)):
-            for k, l in all_kl:
-                bk.add_forbidden_edge(DTimeVar(x, -k), DTimeVar(y, -l))
-                bk.add_forbidden_edge(DTimeVar(y, -k), DTimeVar(x, -l))
-        else:
-            for a, b in ((x, y), (y, x)):  # a -> b only (not a <-> b)
-                if a in set(scg.get_parents(b)) and a not in set(scg.get_children(b)):
-                    bk.add_mandatory_orientation(DTimeVar(a, 0), DTimeVar(b, 0))
-    for x in nodes:
-        if x not in set(scg.get_adjacencies(x)):  # no self-loop -> no lagged copies of x
-            for k, l in all_kl:
-                if k != l:
-                    bk.add_forbidden_edge(DTimeVar(x, -k), DTimeVar(x, -l))
-    return bk
-
-
-def run_tpc(data, scg, ft_dag, params):
-    """Run TPC once on the whole dataset (nb_tests and time are those of the whole graph)."""
-    t0 = time.perf_counter()
-    tpc = TsPC(sparsity=params["alpha"], ci_test=FisherZTest,
-               background_knowledge=bk_from_scg(scg, scg.get_lag_max()),
-               oracle=ORACLE, true_ftdag=ft_dag)
-    tpc.run(data)
-    return dict(directed=set(tpc.g_hat.get_directed_edges()),
-                undirected=set(tpc.g_hat.get_undirected_edges()),
-                nb_tests=tpc.nb_ci_tests, time=time.perf_counter() - t0)
-
-
 def tpc_edge(tpc, u, v):
     """TPC's verdict on u_t - v_t: 'u -> v', 'u <- v', 'u -- v' (undirected) or 'not adjacent'."""
     A, B = DTimeVar(u, 0), DTimeVar(v, 0)
@@ -185,12 +150,16 @@ def evaluate(task, params):
 
     # TPC (compared in its own format, oriented as cause -> effect)
     if USE_TPC:
-        tpc = run_tpc(data, scg, ft_dag, params)
+        # TPC with the SCG BK + support step, run once on the whole dataset
+        # (nb_tests and time are those of the whole graph)
+        tpc = run_tpc_bkscg(data, scg, alpha=params["alpha"], oracle=ORACLE, true_ftdag=ft_dag)
         tpc_pred = tpc_edge(tpc, cause, effect)
         tpc_truth = f"{cause} -> {effect}" if adjacent else "not adjacent"
         row.update(tpc_predicted=tpc_pred, tpc_correct=tpc_pred == tpc_truth,
                    tpc_undirected="--" in tpc_pred, tpc_nb_tests=tpc["nb_tests"],
-                   tpc_time=tpc["time"])
+                   tpc_time=tpc["time"],
+                   tpc_n_support_orientations=tpc["n_support_orientations"],
+                   tpc_support_conflicts=len(tpc["support_conflicts"]))
     return row
 
 
